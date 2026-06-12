@@ -2,6 +2,19 @@
 
 ## Completed
 
+- Phase 5 Frontend:
+  - Added frontend API client and shared TypeScript contracts for room, player, property, realtime state, chat, create room, and join room flows.
+  - Added local room session persistence for guest/player identity used by Socket.IO reconnect.
+  - Added Socket.IO client factory and Zustand room store for realtime room state, connection status, and chat messages.
+  - Added reusable UI components for app shell, buttons, inputs, selects, cards, badges, and loading states.
+  - Added Home page with create/join navigation, public room list, refresh flow, and how-to-play content.
+  - Added Create Room page connected to `POST /api/rooms`, storing host session and redirecting to `/room/:roomId`.
+  - Added Join Room page connected to `POST /api/rooms/join`, including password-required handling and session persistence.
+  - Added Room page connected to REST room detail, board properties, Socket.IO `join_room`, `chat_message`, `start_game`, `room_state_update`, `chat_broadcast`, and `game_started`.
+  - Added responsive game screen shell with 40-tile board, player list, action panel, chat box, and game log.
+  - Kept gameplay-only actions disabled until Phase 6 backend gameplay is implemented.
+  - Added frontend tests for board layout helpers, Indonesian formatting, and session persistence.
+  - Verified Phase 5 through lint, typecheck, test, build, production audit, browser create-room smoke test, chat smoke test, and mobile viewport smoke test.
 - Phase 4 Realtime:
   - Added Redis infrastructure module and service for realtime state, socket session mapping, reconnect windows, state versioning, and chat rate counters.
   - Added Socket.IO realtime module with `join_room`, `chat_message`, and `start_game` events.
@@ -72,7 +85,6 @@
 
 ## Remaining
 
-- Phase 5 frontend pages and game UI.
 - Phase 6 gameplay engine.
 - Phase 7 testing and coverage gate.
 - Finalize invite-only room model.
@@ -84,7 +96,6 @@
 
 ## Blockers / Known Issues
 
-- Frontend still has no test files because frontend feature implementation starts in later phases.
 - Full 80% coverage gate is pending until more product code exists.
 - `npm audit` still reports dev-only vulnerabilities, while production audit (`npm audit --omit=dev`) is clean.
 - Local host PostgreSQL connection using `localhost:5432` may collide with Windows/Laragon networking; Docker Compose service-to-service verification works using the backend container and `postgres` hostname.
