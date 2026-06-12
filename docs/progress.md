@@ -3,6 +3,7 @@
 ## Completed
 
 - Added initial root `.gitignore` for the planned Next.js, NestJS, Docker, PostgreSQL, Redis, test, cache, environment, and local-tool artifacts.
+- Renamed main documentation files to use sequential numeric prefixes from `01` through `15`.
 - Read all existing documents in `docs`.
 - Created architecture planning document aligned with PRD.
 - Created ERD document aligned with database and PRD requirements.
@@ -25,6 +26,7 @@
 
 - Planning gate before Phase 1 coding.
 - Keep `.gitignore` updated as project tooling and generated artifacts are added.
+- Keep documentation numbering updated when new long-lived docs are added.
 
 ## Pending
 
