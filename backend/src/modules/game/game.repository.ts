@@ -45,4 +45,18 @@ export class GameRepository {
 
     return result.rows;
   }
+
+  async appendLog(
+    roomId: string,
+    eventType: string,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
+    await this.database.query(
+      `
+        INSERT INTO game_logs (room_id, event_type, payload)
+        VALUES ($1, $2, $3::jsonb)
+      `,
+      [roomId, eventType, JSON.stringify(payload)],
+    );
+  }
 }

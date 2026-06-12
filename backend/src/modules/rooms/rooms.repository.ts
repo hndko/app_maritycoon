@@ -64,6 +64,11 @@ export type RoomPlayerRecord = {
   joined_at: Date;
 };
 
+export type StartedGameRecord = {
+  first_turn_player_id: string;
+  players: RoomPlayerRecord[];
+};
+
 export type JoinPlayerInput = {
   roomId: string;
   playerName: string;
@@ -276,6 +281,98 @@ export class RoomsRepository {
     );
 
     return result.rows;
+  }
+
+  async findPlayerInRoom(
+    roomId: string,
+    playerId: string,
+  ): Promise<RoomPlayerRecord | null> {
+    const result = await this.database.query<RoomPlayerRecord>(
+      `
+        SELECT
+          id,
+          room_id,
+          user_id,
+          player_name,
+          money,
+          position,
+          is_bankrupt,
+          is_host,
+          is_ready,
+          turn_order,
+          joined_at
+        FROM room_players
+        WHERE room_id = $1 AND id = $2
+      `,
+      [roomId, playerId],
+    );
+
+    return result.rows[0] ?? null;
+  }
+
+  async startGame(roomId: string, startingMoney: number): Promise<StartedGameRecord> {
+    return this.database.transaction(async (client) => {
+      const playerResult = await client.query<RoomPlayerRecord>(
+        `
+          SELECT
+            id,
+            room_id,
+            user_id,
+            player_name,
+            money,
+            position,
+            is_bankrupt,
+            is_host,
+            is_ready,
+            turn_order,
+            joined_at
+          FROM room_players
+          WHERE room_id = $1
+          ORDER BY joined_at ASC
+        `,
+        [roomId],
+      );
+      const players = playerResult.rows;
+
+      for (let index = 0; index < players.length; index += 1) {
+        await client.query(
+          `
+            UPDATE room_players
+            SET money = $1, position = 0, turn_order = $2
+            WHERE id = $3
+          `,
+          [startingMoney, index + 1, players[index].id],
+        );
+      }
+
+      await client.query("UPDATE rooms SET status = 'playing' WHERE id = $1", [roomId]);
+
+      const updatedPlayers = await client.query<RoomPlayerRecord>(
+        `
+          SELECT
+            id,
+            room_id,
+            user_id,
+            player_name,
+            money,
+            position,
+            is_bankrupt,
+            is_host,
+            is_ready,
+            turn_order,
+            joined_at
+          FROM room_players
+          WHERE room_id = $1
+          ORDER BY turn_order ASC
+        `,
+        [roomId],
+      );
+
+      return {
+        first_turn_player_id: updatedPlayers.rows[0].id,
+        players: updatedPlayers.rows,
+      };
+    });
   }
 
   getClientForTests(): DatabaseService {

@@ -2,6 +2,18 @@
 
 ## Completed
 
+- Phase 4 Realtime:
+  - Added Redis infrastructure module and service for realtime state, socket session mapping, reconnect windows, state versioning, and chat rate counters.
+  - Added Socket.IO realtime module with `join_room`, `chat_message`, and `start_game` events.
+  - Added authoritative room state broadcasts through `room_state_update`.
+  - Added user/system chat broadcast shape through `chat_broadcast` and persisted chat logs.
+  - Added host-only `start_game` validation for waiting rooms with at least two players.
+  - Added game start persistence for room status, player turn order, starting money, and game log.
+  - Added reconnect behavior that marks disconnected player slots for a 5-minute Redis-backed window without removing room player records.
+  - Added socket payload validation and room/player membership validation.
+  - Added chat anti-spam rate limiting per room/player.
+  - Added realtime service tests for room isolation, reconnect, host-only start, and chat anti-spam.
+  - Verified Phase 4 through lint, typecheck, test, build, production audit, and Docker Compose Socket.IO smoke test.
 - Phase 3 Backend API:
   - Added PostgreSQL-backed database module and injectable database service for NestJS repositories.
   - Added guest creation API at `POST /api/guests`.
@@ -60,7 +72,6 @@
 
 ## Remaining
 
-- Phase 4 realtime Socket.IO.
 - Phase 5 frontend pages and game UI.
 - Phase 6 gameplay engine.
 - Phase 7 testing and coverage gate.
@@ -81,4 +92,4 @@
 - PRD includes turn timer input, but the current database/API docs do not define timer persistence or realtime timeout events.
 - Sitemap includes ready status, but the current database/API docs do not define ready state.
 - Design/components mention trade UI, while PRD lists trading as a future feature.
-- Reconnect timeout is required, but guest session token mechanics are not yet specified.
+- Reconnect currently uses room/player identity and Redis socket state; durable guest session token mechanics still need frontend/session hardening.
