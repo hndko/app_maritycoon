@@ -8,14 +8,31 @@
 - Created realtime flow document for Socket.IO room and gameplay events.
 - Created game state design document for Redis, PostgreSQL, and authoritative server state.
 - Created development roadmap document with MVP phases and requirement gates.
+- Re-read mandatory source documents before implementation planning:
+  - `docs/01. prd.md`
+  - `docs/02. design.md`
+  - `docs/03. sitemap.md`
+  - `docs/04. components.md`
+  - `docs/05. database.md`
+  - `docs/06. api-spec.md`
+  - `docs/07. game-rules.md`
+- Created pre-coding implementation plan.
+- Created task breakdown following the required implementation order.
+- Created dependency map for phases, runtime, database, events, and tests.
 
 ## In Progress
 
-- Requirement review before implementation.
-- Git workflow alignment on `main` branch.
+- Planning gate before Phase 1 coding.
 
 ## Pending
 
+- Phase 1 project setup.
+- Phase 2 database migrations and seed.
+- Phase 3 backend API.
+- Phase 4 realtime Socket.IO.
+- Phase 5 frontend pages and game UI.
+- Phase 6 gameplay engine.
+- Phase 7 testing and coverage gate.
 - Finalize invite-only room model.
 - Finalize turn timer field and timeout behavior.
 - Finalize ready status model for waiting room.
