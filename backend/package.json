@@ -10,7 +10,8 @@
     "db:seed": "tsx scripts/seed.ts",
     "lint": "eslint \"**/*.ts\" --max-warnings=0",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "test:coverage": "vitest run --coverage --passWithNoTests"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.26",
@@ -38,6 +39,7 @@
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22.10.6",
     "@types/pg": "^8.11.10",
+    "@vitest/coverage-v8": "^2.1.9",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
     "vitest": "^2.1.8"

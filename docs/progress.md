@@ -2,6 +2,16 @@
 
 ## Completed
 
+- Phase 7 Testing:
+  - Added explicit workspace coverage scripts with Vitest V8 coverage provider.
+  - Added frontend unit coverage gate for game components, UI primitives, board helpers, formatting helpers, and room session persistence.
+  - Added frontend component tests for ActionPanel state-gated actions, BoardTile ownership/building/mortgage rendering, PlayerCard/PlayerList, GameBoard, ChatBox, GameLog, and shared UI controls.
+  - Added backend coverage gate for application/domain services, realtime state store, and board seed rules.
+  - Added backend tests for game service, room code generation, triple-double jail, special tiles, rent debt, mortgage debt resolution, double extra turn, and bankruptcy winner flow.
+  - Verified coverage gates:
+    - Frontend unit surface: 97.63% statements/lines, 90.74% branches, 95.83% functions.
+    - Backend unit surface: 87.33% statements/lines, 72.22% branches, 92.59% functions.
+  - Verified Phase 7 through lint, typecheck, test, coverage, build, and production audit.
 - Phase 6 Gameplay:
   - Added server-authoritative gameplay state for turn phase, dice, pending actions, jailed players, room properties, and winner state.
   - Initialized `room_properties` when a game starts.
@@ -100,7 +110,6 @@
 
 ## Remaining
 
-- Phase 7 testing and coverage gate.
 - Finalize invite-only room model.
 - Finalize turn timer field and timeout behavior.
 - Finalize ready status model for waiting room.
@@ -111,7 +120,7 @@
 
 ## Blockers / Known Issues
 
-- Full 80% coverage gate is pending until more product code exists.
+- Coverage gates are scoped to unit-testable frontend component/helper/session code and backend application/domain services. Full browser E2E coverage for Next route clients remains future hardening.
 - `npm audit` still reports dev-only vulnerabilities, while production audit (`npm audit --omit=dev`) is clean.
 - Local host PostgreSQL connection using `localhost:5432` may collide with Windows/Laragon networking; Docker Compose service-to-service verification works using the backend container and `postgres` hostname.
 - PRD requires invite-only rooms, but the current database/API docs do not define invite tokens or allowlists.

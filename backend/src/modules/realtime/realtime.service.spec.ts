@@ -117,6 +117,51 @@ function createHarness() {
       house_price: 500000,
       mortgage_value: 300000,
     },
+    {
+      id: 4,
+      name: 'Pajak Jalan',
+      type: 'tax',
+      color_group: null,
+      price: null,
+      base_rent: null,
+      rent_1_house: null,
+      rent_2_house: null,
+      rent_3_house: null,
+      rent_4_house: null,
+      rent_hotel: null,
+      house_price: null,
+      mortgage_value: null,
+    },
+    {
+      id: 7,
+      name: 'Kesempatan',
+      type: 'chance',
+      color_group: null,
+      price: null,
+      base_rent: null,
+      rent_1_house: null,
+      rent_2_house: null,
+      rent_3_house: null,
+      rent_4_house: null,
+      rent_hotel: null,
+      house_price: null,
+      mortgage_value: null,
+    },
+    {
+      id: 30,
+      name: 'Masuk Penjara',
+      type: 'jail',
+      color_group: null,
+      price: null,
+      base_rent: null,
+      rent_1_house: null,
+      rent_2_house: null,
+      rent_3_house: null,
+      rent_4_house: null,
+      rent_hotel: null,
+      house_price: null,
+      mortgage_value: null,
+    },
   ];
   const roomProperties: RoomPropertyRecord[] = [];
   const appendLog = vi.fn(async () => undefined);
@@ -225,9 +270,46 @@ function createHarness() {
         property.owner_id = ownerId;
       }
     }),
-    buildOnProperty: vi.fn(),
-    mortgageProperty: vi.fn(),
-    unmortgageProperty: vi.fn(),
+    buildOnProperty: vi.fn(
+      async (
+        _roomId: string,
+        propertyId: number,
+        playerId: string,
+        cost: number,
+        nextHouseCount: number,
+        nextHotelCount: number,
+      ) => {
+        const player = players.find((item) => item.id === playerId);
+        const property = roomProperties.find((item) => item.property_id === propertyId);
+        if (player) {
+          player.money -= cost;
+        }
+        if (property) {
+          property.house_count = nextHouseCount;
+          property.hotel_count = nextHotelCount;
+        }
+      },
+    ),
+    mortgageProperty: vi.fn(async (_roomId: string, propertyId: number, playerId: string, mortgageValue: number) => {
+      const player = players.find((item) => item.id === playerId);
+      const property = roomProperties.find((item) => item.property_id === propertyId);
+      if (player) {
+        player.money += mortgageValue;
+      }
+      if (property) {
+        property.is_mortgaged = true;
+      }
+    }),
+    unmortgageProperty: vi.fn(async (_roomId: string, propertyId: number, playerId: string, cost: number) => {
+      const player = players.find((item) => item.id === playerId);
+      const property = roomProperties.find((item) => item.property_id === propertyId);
+      if (player) {
+        player.money -= cost;
+      }
+      if (property) {
+        property.is_mortgaged = false;
+      }
+    }),
     markPlayerBankrupt: vi.fn(async (playerId: string) => {
       const player = players.find((item) => item.id === playerId);
       if (player) {
@@ -420,6 +502,369 @@ describe('RealtimeService', () => {
     );
     expect(players[0].money).toBe(roomA.starting_money - 600000);
     randomSpy.mockRestore();
+  });
+
+  it('awards START bonus and pays rent automatically after landing on owned property', async () => {
+    const { players, roomProperties, service } = createHarness();
+    const randomSpy = vi.spyOn(Math, 'random');
+    randomSpy.mockReturnValueOnce(0).mockReturnValueOnce(0);
+
+    await service.startGame({
+      socketId: 'socket-a',
+      roomId: roomA.id,
+      playerId: 'aaaaaaaa-1111-4111-8111-111111111111',
+      playerName: 'Host A',
+    });
+    players[0].position = 39;
+    roomProperties.find((property) => property.property_id === 1)!.owner_id =
+      'bbbbbbbb-1111-4111-8111-111111111111';
+
+    const result = await service.rollDice({
+      socketId: 'socket-a',
+      roomId: roomA.id,
+      playerId: 'aaaaaaaa-1111-4111-8111-111111111111',
+      playerName: 'Host A',
+    });
+
+    expect(result.moved).toMatchObject({ new_position: 1, passed_start: true });
+    expect(result.rentPaid).toMatchObject({
+      payer_id: 'aaaaaaaa-1111-4111-8111-111111111111',
+      owner_id: 'bbbbbbbb-1111-4111-8111-111111111111',
+      property_id: 1,
+      amount: 20000,
+    });
+    expect(players[0].money).toBe(roomA.starting_money + 2000000 - 20000);
+    expect(players[1].money).toBe(roomA.starting_money + 20000);
+    randomSpy.mockRestore();
+  });
+
+  it('builds evenly on a completed color set', async () => {
+    const { players, roomProperties, service, stateStore } = createHarness();
+
+    await service.startGame({
+      socketId: 'socket-a',
+      roomId: roomA.id,
+      playerId: 'aaaaaaaa-1111-4111-8111-111111111111',
+      playerName: 'Host A',
+    });
+    roomProperties.forEach((property) => {
+      property.owner_id = 'aaaaaaaa-1111-4111-8111-111111111111';
+    });
+    await stateStore.setGameplayState(roomA.id, {
+      current_player_id: 'aaaaaaaa-1111-4111-8111-111111111111',
+      phase: 'free_action',
+      double_count: 0,
+      dice: null,
+      pending_action: null,
+      jailed_player_ids: [],
+      winner_id: null,
+    });
+
+    const result = await service.buildHouse(
+      {
+        socketId: 'socket-a',
+        roomId: roomA.id,
+        playerId: 'aaaaaaaa-1111-4111-8111-111111111111',
+        playerName: 'Host A',
+      },
+      1,
+    );
+
+    expect(result.state.properties.find((property) => property.property_id === 1)?.house_count).toBe(1);
+    expect(players[0].money).toBe(roomA.starting_money - 500000);
+  });
+
+  it('mortgages and unmortgages an owned property through authoritative state', async () => {
+    const { players, roomProperties, service, stateStore } = createHarness();
+    const session = {
+      socketId: 'socket-a',
+      roomId: roomA.id,
+      playerId: 'aaaaaaaa-1111-4111-8111-111111111111',
+      playerName: 'Host A',
+    };
+
+    await service.startGame(session);
+    roomProperties.find((property) => property.property_id === 1)!.owner_id = session.playerId;
+    await stateStore.setGameplayState(roomA.id, {
+      current_player_id: session.playerId,
+      phase: 'free_action',
+      double_count: 0,
+      dice: null,
+      pending_action: null,
+      jailed_player_ids: [],
+      winner_id: null,
+    });
+
+    const mortgaged = await service.mortgageProperty(session, 1);
+    expect(mortgaged.state.properties.find((property) => property.property_id === 1)?.is_mortgaged).toBe(true);
+    expect(players[0].money).toBe(roomA.starting_money + 300000);
+
+    const unmortgaged = await service.unmortgageProperty(session, 1);
+    expect(unmortgaged.state.properties.find((property) => property.property_id === 1)?.is_mortgaged).toBe(false);
+    expect(players[0].money).toBe(roomA.starting_money - 30000);
+  });
+
+  it('declares bankruptcy, transfers assets, and finishes when one player remains', async () => {
+    const { roomProperties, service, stateStore } = createHarness();
+    const debtorId = 'aaaaaaaa-1111-4111-8111-111111111111';
+    const creditorId = 'bbbbbbbb-1111-4111-8111-111111111111';
+
+    await service.startGame({
+      socketId: 'socket-a',
+      roomId: roomA.id,
+      playerId: debtorId,
+      playerName: 'Host A',
+    });
+    roomProperties.find((property) => property.property_id === 1)!.owner_id = debtorId;
+    await stateStore.setGameplayState(roomA.id, {
+      current_player_id: debtorId,
+      phase: 'bankruptcy_resolution',
+      double_count: 0,
+      dice: null,
+      pending_action: {
+        type: 'bankruptcy_resolution',
+        player_id: debtorId,
+        creditor_id: creditorId,
+        amount: 20000000,
+        reason: 'rent',
+      },
+      jailed_player_ids: [],
+      winner_id: null,
+    });
+
+    const result = await service.declareBankruptcy({
+      socketId: 'socket-a',
+      roomId: roomA.id,
+      playerId: debtorId,
+      playerName: 'Host A',
+    });
+
+    expect(result.bankrupt.player_id).toBe(debtorId);
+    expect(result.finished?.winner_id).toBe(creditorId);
+    expect(result.state.status).toBe('finished');
+    expect(result.state.properties.find((property) => property.property_id === 1)?.owner_id).toBe(creditorId);
+  });
+
+  it('sends a player to jail after triple double', async () => {
+    const { players, service, stateStore } = createHarness();
+    const randomSpy = vi.spyOn(Math, 'random');
+    randomSpy.mockReturnValueOnce(0).mockReturnValueOnce(0);
+
+    await service.startGame({
+      socketId: 'socket-a',
+      roomId: roomA.id,
+      playerId: 'aaaaaaaa-1111-4111-8111-111111111111',
+      playerName: 'Host A',
+    });
+    await stateStore.setGameplayState(roomA.id, {
+      current_player_id: 'aaaaaaaa-1111-4111-8111-111111111111',
+      phase: 'await_roll',
+      double_count: 2,
+      dice: null,
+      pending_action: null,
+      jailed_player_ids: [],
+      winner_id: null,
+    });
+
+    const result = await service.rollDice({
+      socketId: 'socket-a',
+      roomId: roomA.id,
+      playerId: 'aaaaaaaa-1111-4111-8111-111111111111',
+      playerName: 'Host A',
+    });
+
+    expect(result.moved?.new_position).toBe(10);
+    expect(result.state.players.find((item) => item.id === players[0].id)?.is_in_jail).toBe(true);
+    randomSpy.mockRestore();
+  });
+
+  it('keeps the turn after a double and advances after a normal roll', async () => {
+    const { service, stateStore } = createHarness();
+    const session = {
+      socketId: 'socket-a',
+      roomId: roomA.id,
+      playerId: 'aaaaaaaa-1111-4111-8111-111111111111',
+      playerName: 'Host A',
+    };
+
+    await service.startGame(session);
+    await stateStore.setGameplayState(roomA.id, {
+      current_player_id: session.playerId,
+      phase: 'free_action',
+      double_count: 1,
+      dice: {
+        dice_1: 2,
+        dice_2: 2,
+        is_double: true,
+        rolled_at: '2026-01-01T00:00:00.000Z',
+        total: 4,
+      },
+      pending_action: null,
+      jailed_player_ids: [],
+      winner_id: null,
+    });
+
+    const extraTurn = await service.endTurn(session);
+    expect(extraTurn.turnChanged.next_player_id).toBe(session.playerId);
+
+    await stateStore.setGameplayState(roomA.id, {
+      current_player_id: session.playerId,
+      phase: 'free_action',
+      double_count: 0,
+      dice: {
+        dice_1: 2,
+        dice_2: 3,
+        is_double: false,
+        rolled_at: '2026-01-01T00:00:00.000Z',
+        total: 5,
+      },
+      pending_action: null,
+      jailed_player_ids: [],
+      winner_id: null,
+    });
+
+    const nextTurn = await service.endTurn(session);
+    expect(nextTurn.turnChanged.next_player_id).toBe('bbbbbbbb-1111-4111-8111-111111111111');
+  });
+
+  it('resolves tax, chance, and go-to-jail special tiles from server state', async () => {
+    const { players, service, stateStore } = createHarness();
+    const randomSpy = vi.spyOn(Math, 'random');
+
+    await service.startGame({
+      socketId: 'socket-a',
+      roomId: roomA.id,
+      playerId: 'aaaaaaaa-1111-4111-8111-111111111111',
+      playerName: 'Host A',
+    });
+
+    randomSpy.mockReturnValueOnce(0.2).mockReturnValueOnce(0.2);
+    await service.rollDice({
+      socketId: 'socket-a',
+      roomId: roomA.id,
+      playerId: 'aaaaaaaa-1111-4111-8111-111111111111',
+      playerName: 'Host A',
+    });
+    expect(players[0].position).toBe(4);
+    expect(players[0].money).toBe(roomA.starting_money - 200000);
+
+    players[0].position = 0;
+    await stateStore.setGameplayState(roomA.id, {
+      current_player_id: 'aaaaaaaa-1111-4111-8111-111111111111',
+      phase: 'await_roll',
+      double_count: 0,
+      dice: null,
+      pending_action: null,
+      jailed_player_ids: [],
+      winner_id: null,
+    });
+    randomSpy.mockReturnValueOnce(0).mockReturnValueOnce(0.99);
+    await service.rollDice({
+      socketId: 'socket-a',
+      roomId: roomA.id,
+      playerId: 'aaaaaaaa-1111-4111-8111-111111111111',
+      playerName: 'Host A',
+    });
+    expect(players[0].position).toBe(7);
+    expect(players[0].money).toBe(roomA.starting_money + 300000);
+
+    players[0].position = 28;
+    await stateStore.setGameplayState(roomA.id, {
+      current_player_id: 'aaaaaaaa-1111-4111-8111-111111111111',
+      phase: 'await_roll',
+      double_count: 0,
+      dice: null,
+      pending_action: null,
+      jailed_player_ids: [],
+      winner_id: null,
+    });
+    randomSpy.mockReturnValueOnce(0).mockReturnValueOnce(0);
+    const goToJail = await service.rollDice({
+      socketId: 'socket-a',
+      roomId: roomA.id,
+      playerId: 'aaaaaaaa-1111-4111-8111-111111111111',
+      playerName: 'Host A',
+    });
+    expect(players[0].position).toBe(10);
+    expect(goToJail.state.players.find((item) => item.id === players[0].id)?.is_in_jail).toBe(true);
+    randomSpy.mockRestore();
+  });
+
+  it('creates rent debt when the payer cannot cover rent', async () => {
+    const { players, roomProperties, service } = createHarness();
+    const randomSpy = vi.spyOn(Math, 'random');
+    randomSpy.mockReturnValueOnce(0).mockReturnValueOnce(0.2);
+
+    await service.startGame({
+      socketId: 'socket-a',
+      roomId: roomA.id,
+      playerId: 'aaaaaaaa-1111-4111-8111-111111111111',
+      playerName: 'Host A',
+    });
+    players[0].money = 10000;
+    roomProperties.find((property) => property.property_id === 3)!.owner_id =
+      'bbbbbbbb-1111-4111-8111-111111111111';
+
+    const result = await service.rollDice({
+      socketId: 'socket-a',
+      roomId: roomA.id,
+      playerId: 'aaaaaaaa-1111-4111-8111-111111111111',
+      playerName: 'Host A',
+    });
+
+    expect(result.state.turn.phase).toBe('bankruptcy_resolution');
+    expect(result.state.pending_action).toMatchObject({
+      amount: 40000,
+      creditor_id: 'bbbbbbbb-1111-4111-8111-111111111111',
+      player_id: 'aaaaaaaa-1111-4111-8111-111111111111',
+      type: 'bankruptcy_resolution',
+    });
+    randomSpy.mockRestore();
+  });
+
+  it('resolves pending debt after a mortgage raises enough cash', async () => {
+    const { players, roomProperties, service, stateStore } = createHarness();
+    const debtorId = 'aaaaaaaa-1111-4111-8111-111111111111';
+    const creditorId = 'bbbbbbbb-1111-4111-8111-111111111111';
+
+    await service.startGame({
+      socketId: 'socket-a',
+      roomId: roomA.id,
+      playerId: debtorId,
+      playerName: 'Host A',
+    });
+    players[0].money = 0;
+    roomProperties.find((property) => property.property_id === 1)!.owner_id = debtorId;
+    await stateStore.setGameplayState(roomA.id, {
+      current_player_id: debtorId,
+      phase: 'bankruptcy_resolution',
+      double_count: 0,
+      dice: null,
+      pending_action: {
+        type: 'bankruptcy_resolution',
+        player_id: debtorId,
+        creditor_id: creditorId,
+        amount: 200000,
+        reason: 'rent',
+      },
+      jailed_player_ids: [],
+      winner_id: null,
+    });
+
+    const result = await service.mortgageProperty(
+      {
+        socketId: 'socket-a',
+        roomId: roomA.id,
+        playerId: debtorId,
+        playerName: 'Host A',
+      },
+      1,
+    );
+
+    expect(result.state.turn.phase).toBe('free_action');
+    expect(result.state.pending_action).toBeNull();
+    expect(players[0].money).toBe(100000);
+    expect(players[1].money).toBe(roomA.starting_money + 200000);
   });
 
   it('rejects roll_dice from a player outside the current turn', async () => {
