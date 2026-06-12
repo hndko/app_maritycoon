@@ -2,6 +2,15 @@
 
 ## Completed
 
+- Phase 2 Database:
+  - Added PostgreSQL initial schema migration for guest users, rooms, room players, master properties, room properties, game logs, enums, constraints, and indexes.
+  - Added migration runner and `db:migrate` script.
+  - Added repeatable board seed data for 40 board positions with Indonesian property groups.
+  - Added seed runner and `db:seed` script.
+  - Added backend database configuration and PostgreSQL pool factory.
+  - Added database unit tests for migration discovery and board seed integrity.
+  - Verified migration and seed through Docker Compose backend container against PostgreSQL.
+  - Verified repeatable migration/seed behavior.
 - Phase 1 Project Setup:
   - Added npm workspace structure for `frontend` and `backend`.
   - Added Next.js TypeScript frontend shell with Tailwind design tokens.
@@ -38,7 +47,6 @@
 
 ## Pending
 
-- Phase 2 database migrations and seed.
 - Phase 3 backend API.
 - Phase 4 realtime Socket.IO.
 - Phase 5 frontend pages and game UI.
@@ -50,13 +58,13 @@
 - Finalize full board tile index, tax values, utilities, stations, jail, and go-to-jail positions.
 - Finalize Chance and Community Chest card deck and effects.
 - Decide whether auction, spectator, trade, and host end-game behavior are in MVP scope.
-- Add project scripts for lint, typecheck, and test once frontend/backend scaffolding exists.
 
 ## Known Issues
 
-- Vitest currently has no test files because Phase 1 only establishes the project skeleton; real unit/integration/E2E suites begin in later phases.
-- Full 80% coverage gate is pending until implementation/test phases add executable product code.
+- Frontend still has no test files because frontend feature implementation starts in later phases.
+- Full 80% coverage gate is pending until more product code exists.
 - `npm audit` still reports dev-only vulnerabilities, while production audit (`npm audit --omit=dev`) is clean.
+- Local host PostgreSQL connection using `localhost:5432` may collide with Windows/Laragon networking; Docker Compose service-to-service verification works using the backend container and `postgres` hostname.
 - PRD requires invite-only rooms, but the current database/API docs do not define invite tokens or allowlists.
 - PRD includes turn timer input, but the current database/API docs do not define timer persistence or realtime timeout events.
 - Sitemap includes ready status, but the current database/API docs do not define ready state.

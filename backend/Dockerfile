@@ -19,6 +19,9 @@ ENV NODE_ENV=production
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/backend/package.json ./backend/package.json
+COPY --from=builder /app/backend/database ./backend/database
+COPY --from=builder /app/backend/scripts ./backend/scripts
+COPY --from=builder /app/backend/src ./backend/src
 COPY --from=builder /app/backend/dist ./backend/dist
 WORKDIR /app/backend
 EXPOSE 4000
