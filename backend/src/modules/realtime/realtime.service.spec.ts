@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { RedisService } from '../../infrastructure/redis/redis.service';
-import { GameRepository } from '../game/game.repository';
+import { GameRepository, PropertyRecord, RoomPropertyRecord } from '../game/game.repository';
 import {
   RoomPlayerRecord,
   RoomRecord,
@@ -86,6 +86,39 @@ function createHarness() {
     createPlayer('bbbbbbbb-1111-4111-8111-111111111111', roomA.id, 'Player A'),
     createPlayer('cccccccc-2222-4222-8222-222222222222', roomB.id, 'Host B', true),
   ];
+  const properties: PropertyRecord[] = [
+    {
+      id: 1,
+      name: 'Serang',
+      type: 'city',
+      color_group: 'Brown',
+      price: 600000,
+      base_rent: 20000,
+      rent_1_house: 100000,
+      rent_2_house: 300000,
+      rent_3_house: 900000,
+      rent_4_house: 1600000,
+      rent_hotel: 2500000,
+      house_price: 500000,
+      mortgage_value: 300000,
+    },
+    {
+      id: 3,
+      name: 'Cilegon',
+      type: 'city',
+      color_group: 'Brown',
+      price: 600000,
+      base_rent: 40000,
+      rent_1_house: 200000,
+      rent_2_house: 600000,
+      rent_3_house: 1800000,
+      rent_4_house: 3200000,
+      rent_hotel: 5000000,
+      house_price: 500000,
+      mortgage_value: 300000,
+    },
+  ];
+  const roomProperties: RoomPropertyRecord[] = [];
   const appendLog = vi.fn(async () => undefined);
 
   const roomsRepository = {
@@ -116,17 +149,121 @@ function createHarness() {
       };
     }),
   };
+  const gameRepository = {
+    appendLog,
+    initializeRoomProperties: vi.fn(async (roomId: string) => {
+      for (const property of properties) {
+        if (!roomProperties.some((roomProperty) => roomProperty.property_id === property.id)) {
+          roomProperties.push({
+            property_id: property.id,
+            owner_id: null,
+            house_count: 0,
+            hotel_count: 0,
+            is_mortgaged: false,
+          });
+        }
+      }
+      expect(roomId).toBeTruthy();
+    }),
+    listRoomProperties: vi.fn(async () => roomProperties),
+    findProperty: vi.fn(async (propertyId: number) => {
+      return (
+        properties.find((property) => property.id === propertyId) ?? {
+          id: propertyId,
+          name: 'Tile',
+          type: propertyId === 0 ? 'start' : 'parking',
+          color_group: null,
+          price: null,
+          base_rent: null,
+          rent_1_house: null,
+          rent_2_house: null,
+          rent_3_house: null,
+          rent_4_house: null,
+          rent_hotel: null,
+          house_price: null,
+          mortgage_value: null,
+        }
+      );
+    }),
+    findRoomProperty: vi.fn(async (_roomId: string, propertyId: number) => {
+      const roomProperty = roomProperties.find((property) => property.property_id === propertyId);
+      const property = properties.find((propertyItem) => propertyItem.id === propertyId);
+      return roomProperty && property ? { ...roomProperty, ...property } : null;
+    }),
+    listPropertiesByColorGroup: vi.fn(async (colorGroup: string) =>
+      properties.filter((property) => property.color_group === colorGroup),
+    ),
+    updatePlayerPosition: vi.fn(async (playerId: string, position: number) => {
+      const player = players.find((item) => item.id === playerId);
+      if (player) {
+        player.position = position;
+      }
+    }),
+    addPlayerMoney: vi.fn(async (playerId: string, amount: number) => {
+      const player = players.find((item) => item.id === playerId);
+      if (player) {
+        player.money += amount;
+      }
+    }),
+    transferMoney: vi.fn(async (fromPlayerId: string, toPlayerId: string, amount: number) => {
+      const fromPlayer = players.find((item) => item.id === fromPlayerId);
+      const toPlayer = players.find((item) => item.id === toPlayerId);
+      if (fromPlayer) {
+        fromPlayer.money -= amount;
+      }
+      if (toPlayer) {
+        toPlayer.money += amount;
+      }
+    }),
+    buyProperty: vi.fn(async (_roomId: string, propertyId: number, ownerId: string, price: number) => {
+      const player = players.find((item) => item.id === ownerId);
+      const property = roomProperties.find((item) => item.property_id === propertyId);
+      if (player) {
+        player.money -= price;
+      }
+      if (property) {
+        property.owner_id = ownerId;
+      }
+    }),
+    buildOnProperty: vi.fn(),
+    mortgageProperty: vi.fn(),
+    unmortgageProperty: vi.fn(),
+    markPlayerBankrupt: vi.fn(async (playerId: string) => {
+      const player = players.find((item) => item.id === playerId);
+      if (player) {
+        player.is_bankrupt = true;
+        player.money = 0;
+      }
+    }),
+    transferPlayerAssets: vi.fn(async (_roomId: string, fromPlayerId: string, toPlayerId: string | null) => {
+      roomProperties
+        .filter((property) => property.owner_id === fromPlayerId)
+        .forEach((property) => {
+          property.owner_id = toPlayerId;
+          property.house_count = 0;
+          property.hotel_count = 0;
+        });
+    }),
+    finishRoom: vi.fn(async (roomId: string) => {
+      const room = rooms.get(roomId);
+      if (room) {
+        room.status = 'finished';
+      }
+    }),
+  };
   const redisService = new MemoryRedisService() as unknown as RedisService;
   const stateStore = new RealtimeStateStore(redisService);
   const service = new RealtimeService(
     roomsRepository as unknown as RoomsRepository,
-    { appendLog } as unknown as GameRepository,
+    gameRepository as unknown as GameRepository,
     stateStore,
   );
 
   return {
     appendLog,
+    gameRepository,
     players,
+    roomProperties,
     service,
     stateStore,
   };
@@ -191,6 +328,7 @@ describe('RealtimeService', () => {
     expect(result.started.first_turn_player_id).toBe('aaaaaaaa-1111-4111-8111-111111111111');
     expect(result.state.status).toBe('playing');
     expect(result.state.current_turn_player_id).toBe('aaaaaaaa-1111-4111-8111-111111111111');
+    expect(result.state.turn.phase).toBe('await_roll');
     expect(result.state.players.every((player) => player.money === roomA.starting_money)).toBe(true);
   });
 
@@ -224,5 +362,83 @@ describe('RealtimeService', () => {
       service.createChatBroadcast(session, { message: 'Terlalu cepat' }),
     ).rejects.toThrow('Chat rate limit exceeded');
     expect(appendLog).toHaveBeenCalledTimes(5);
+  });
+
+  it('rolls dice on the server and moves the current player', async () => {
+    const { service } = createHarness();
+    const randomSpy = vi.spyOn(Math, 'random');
+    randomSpy.mockReturnValueOnce(0).mockReturnValueOnce(0);
+
+    await service.startGame({
+      socketId: 'socket-a',
+      roomId: roomA.id,
+      playerId: 'aaaaaaaa-1111-4111-8111-111111111111',
+      playerName: 'Host A',
+    });
+    const result = await service.rollDice({
+      socketId: 'socket-a',
+      roomId: roomA.id,
+      playerId: 'aaaaaaaa-1111-4111-8111-111111111111',
+      playerName: 'Host A',
+    });
+
+    expect(result.diceRolled.total).toBe(2);
+    expect(result.moved?.new_position).toBe(2);
+    expect(result.state.turn.phase).toBe('free_action');
+    randomSpy.mockRestore();
+  });
+
+  it('buys the pending property and deducts player money', async () => {
+    const { players, service } = createHarness();
+    const randomSpy = vi.spyOn(Math, 'random');
+    randomSpy.mockReturnValueOnce(0).mockReturnValueOnce(0.2);
+
+    await service.startGame({
+      socketId: 'socket-a',
+      roomId: roomA.id,
+      playerId: 'aaaaaaaa-1111-4111-8111-111111111111',
+      playerName: 'Host A',
+    });
+    await service.rollDice({
+      socketId: 'socket-a',
+      roomId: roomA.id,
+      playerId: 'aaaaaaaa-1111-4111-8111-111111111111',
+      playerName: 'Host A',
+    });
+    const result = await service.buyProperty(
+      {
+        socketId: 'socket-a',
+        roomId: roomA.id,
+        playerId: 'aaaaaaaa-1111-4111-8111-111111111111',
+        playerName: 'Host A',
+      },
+      3,
+    );
+
+    expect(result.state.properties.find((property) => property.property_id === 3)?.owner_id).toBe(
+      'aaaaaaaa-1111-4111-8111-111111111111',
+    );
+    expect(players[0].money).toBe(roomA.starting_money - 600000);
+    randomSpy.mockRestore();
+  });
+
+  it('rejects roll_dice from a player outside the current turn', async () => {
+    const { service } = createHarness();
+
+    await service.startGame({
+      socketId: 'socket-a',
+      roomId: roomA.id,
+      playerId: 'aaaaaaaa-1111-4111-8111-111111111111',
+      playerName: 'Host A',
+    });
+
+    await expect(
+      service.rollDice({
+        socketId: 'socket-b',
+        roomId: roomA.id,
+        playerId: 'bbbbbbbb-1111-4111-8111-111111111111',
+        playerName: 'Player A',
+      }),
+    ).rejects.toThrow('It is not this player turn');
   });
 });

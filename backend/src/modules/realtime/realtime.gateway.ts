@@ -17,6 +17,7 @@ import { validateSync } from 'class-validator';
 import { Server, Socket } from 'socket.io';
 import { ChatMessageSocketDto } from './dto/chat-message-socket.dto';
 import { JoinRoomSocketDto } from './dto/join-room-socket.dto';
+import { PropertyActionSocketDto } from './dto/property-action-socket.dto';
 import { RealtimeService } from './realtime.service';
 import { socketRoomPrefix, SocketErrorPayload, SocketSession } from './realtime.types';
 
@@ -89,6 +90,152 @@ export class RealtimeGateway implements OnGatewayDisconnect {
 
       this.server.to(this.roomName(session.roomId)).emit('game_started', started);
       this.server.to(this.roomName(session.roomId)).emit('room_state_update', state);
+    } catch (error) {
+      this.emitError(socket, error);
+    }
+  }
+
+  @SubscribeMessage('roll_dice')
+  async rollDice(@ConnectedSocket() socket: Socket): Promise<void> {
+    try {
+      const session = this.getSession(socket);
+      const result = await this.realtimeService.rollDice(session);
+      const roomName = this.roomName(session.roomId);
+
+      this.server.to(roomName).emit('dice_rolled_result', result.diceRolled);
+
+      if (result.moved) {
+        this.server.to(roomName).emit('player_moved', result.moved);
+      }
+
+      if (result.rentPaid) {
+        this.server.to(roomName).emit('rent_paid', result.rentPaid);
+      }
+
+      if (result.bankrupt) {
+        this.server.to(roomName).emit('player_bankrupt', result.bankrupt);
+      }
+
+      if (result.finished) {
+        this.server.to(roomName).emit('game_finished', result.finished);
+      }
+
+      if (result.state.pending_action) {
+        this.server.to(roomName).emit('action_required', result.state.pending_action);
+      }
+
+      this.server.to(roomName).emit('room_state_update', result.state);
+    } catch (error) {
+      this.emitError(socket, error);
+    }
+  }
+
+  @SubscribeMessage('buy_property')
+  async buyProperty(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: unknown,
+  ): Promise<void> {
+    try {
+      const session = this.getSession(socket);
+      const payload = this.validatePayload(PropertyActionSocketDto, body);
+      const result = await this.realtimeService.buyProperty(session, payload.property_id);
+      const property = result.state.properties.find(
+        (roomProperty) => roomProperty.property_id === payload.property_id,
+      );
+      const roomName = this.roomName(session.roomId);
+
+      if (property) {
+        this.server.to(roomName).emit('property_updated', property);
+      }
+
+      this.server.to(roomName).emit('room_state_update', result.state);
+    } catch (error) {
+      this.emitError(socket, error);
+    }
+  }
+
+  @SubscribeMessage('build_house')
+  async buildHouse(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: unknown,
+  ): Promise<void> {
+    try {
+      const session = this.getSession(socket);
+      const payload = this.validatePayload(PropertyActionSocketDto, body);
+      const result = await this.realtimeService.buildHouse(session, payload.property_id);
+      const property = result.state.properties.find(
+        (roomProperty) => roomProperty.property_id === payload.property_id,
+      );
+      const roomName = this.roomName(session.roomId);
+
+      if (property) {
+        this.server.to(roomName).emit('property_updated', property);
+      }
+
+      this.server.to(roomName).emit('room_state_update', result.state);
+    } catch (error) {
+      this.emitError(socket, error);
+    }
+  }
+
+  @SubscribeMessage('mortgage_property')
+  async mortgageProperty(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: unknown,
+  ): Promise<void> {
+    try {
+      const session = this.getSession(socket);
+      const payload = this.validatePayload(PropertyActionSocketDto, body);
+      const result = await this.realtimeService.mortgageProperty(session, payload.property_id);
+      this.server.to(this.roomName(session.roomId)).emit('room_state_update', result.state);
+    } catch (error) {
+      this.emitError(socket, error);
+    }
+  }
+
+  @SubscribeMessage('unmortgage_property')
+  async unmortgageProperty(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: unknown,
+  ): Promise<void> {
+    try {
+      const session = this.getSession(socket);
+      const payload = this.validatePayload(PropertyActionSocketDto, body);
+      const result = await this.realtimeService.unmortgageProperty(session, payload.property_id);
+      this.server.to(this.roomName(session.roomId)).emit('room_state_update', result.state);
+    } catch (error) {
+      this.emitError(socket, error);
+    }
+  }
+
+  @SubscribeMessage('declare_bankruptcy')
+  async declareBankruptcy(@ConnectedSocket() socket: Socket): Promise<void> {
+    try {
+      const session = this.getSession(socket);
+      const result = await this.realtimeService.declareBankruptcy(session);
+      const roomName = this.roomName(session.roomId);
+
+      this.server.to(roomName).emit('player_bankrupt', result.bankrupt);
+
+      if (result.finished) {
+        this.server.to(roomName).emit('game_finished', result.finished);
+      }
+
+      this.server.to(roomName).emit('room_state_update', result.state);
+    } catch (error) {
+      this.emitError(socket, error);
+    }
+  }
+
+  @SubscribeMessage('end_turn')
+  async endTurn(@ConnectedSocket() socket: Socket): Promise<void> {
+    try {
+      const session = this.getSession(socket);
+      const result = await this.realtimeService.endTurn(session);
+      const roomName = this.roomName(session.roomId);
+
+      this.server.to(roomName).emit('turn_changed', result.turnChanged);
+      this.server.to(roomName).emit('room_state_update', result.state);
     } catch (error) {
       this.emitError(socket, error);
     }

@@ -25,6 +25,7 @@ export type RoomPlayer = {
   joined_at: string;
   is_connected?: boolean;
   disconnected_at?: string | null;
+  is_in_jail?: boolean;
 };
 
 export type RoomDetail = {
@@ -55,6 +56,38 @@ export type PropertyTile = {
   house_price: number | null;
   mortgage_value: number | null;
 };
+
+export type RealtimeRoomProperty = {
+  property_id: number;
+  owner_id: string | null;
+  house_count: number;
+  hotel_count: number;
+  is_mortgaged: boolean;
+};
+
+export type DiceState = {
+  dice_1: number;
+  dice_2: number;
+  total: number;
+  is_double: boolean;
+  rolled_at: string;
+} | null;
+
+export type PendingAction =
+  | {
+      type: 'buy_property';
+      player_id: string;
+      property_id: number;
+      price: number;
+    }
+  | {
+      type: 'bankruptcy_resolution';
+      player_id: string;
+      creditor_id: string | null;
+      amount: number;
+      reason: string;
+    }
+  | null;
 
 export type CreateRoomInput = {
   host_nickname: string;
@@ -109,6 +142,21 @@ export type RealtimeRoomState = {
   state_version: number;
   players: RoomPlayer[];
   current_turn_player_id: string | null;
+  properties: RealtimeRoomProperty[];
+  turn: {
+    current_player_id: string | null;
+    phase:
+      | 'waiting'
+      | 'await_roll'
+      | 'await_action'
+      | 'free_action'
+      | 'bankruptcy_resolution'
+      | 'finished';
+    double_count: number;
+  };
+  dice: DiceState;
+  pending_action: PendingAction;
+  winner_id: string | null;
 };
 
 export type ChatMessage = {

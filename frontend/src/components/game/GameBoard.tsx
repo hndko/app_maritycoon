@@ -1,15 +1,20 @@
-import { PropertyTile, RoomPlayer } from '@/shared/api/types';
+import { PropertyTile, RealtimeRoomProperty, RoomPlayer } from '@/shared/api/types';
 import { boardSize, getBoardTrack } from '@/shared/lib/board';
 import { BoardTile } from './BoardTile';
 
 export function GameBoard({
   players,
   properties,
+  roomProperties = [],
 }: {
   players: RoomPlayer[];
   properties: PropertyTile[];
+  roomProperties?: RealtimeRoomProperty[];
 }) {
   const tileMap = new Map(properties.map((property) => [property.id, property]));
+  const roomPropertyMap = new Map(
+    roomProperties.map((property) => [property.property_id, property]),
+  );
 
   return (
     <section className="w-full overflow-x-auto rounded-lg border border-slate-200 bg-slate-100 p-3">
@@ -32,6 +37,7 @@ export function GameBoard({
             >
               <BoardTile
                 players={players.filter((player) => player.position === tile.id)}
+                roomProperty={roomPropertyMap.get(tile.id)}
                 tile={tile}
               />
             </div>

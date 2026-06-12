@@ -123,6 +123,42 @@ export function RoomClient({ roomId }: { roomId: string }) {
         type: 'system',
       });
     });
+    socket.on('dice_rolled_result', (payload: { player_id: string; dice_1: number; dice_2: number; total: number; is_double: boolean }) => {
+      appendChat({
+        message: `Dadu: ${payload.dice_1} + ${payload.dice_2} = ${payload.total}${payload.is_double ? ' (double)' : ''}`,
+        room_id: roomId,
+        sender_name: 'System',
+        timestamp: new Date().toISOString(),
+        type: 'system',
+      });
+    });
+    socket.on('rent_paid', (payload: { amount: number }) => {
+      appendChat({
+        message: `Rent dibayar ${payload.amount.toLocaleString('id-ID')}`,
+        room_id: roomId,
+        sender_name: 'System',
+        timestamp: new Date().toISOString(),
+        type: 'system',
+      });
+    });
+    socket.on('player_bankrupt', (payload: { player_id: string }) => {
+      appendChat({
+        message: `Player ${payload.player_id.slice(0, 8)} bangkrut`,
+        room_id: roomId,
+        sender_name: 'System',
+        timestamp: new Date().toISOString(),
+        type: 'system',
+      });
+    });
+    socket.on('game_finished', (payload: { winner_id: string }) => {
+      appendChat({
+        message: `Game selesai. Winner: ${payload.winner_id.slice(0, 8)}`,
+        room_id: roomId,
+        sender_name: 'System',
+        timestamp: new Date().toISOString(),
+        type: 'system',
+      });
+    });
     socket.on('error', (payload: { message?: string }) => {
       setError(payload.message ?? 'Socket error');
     });
@@ -195,6 +231,30 @@ export function RoomClient({ roomId }: { roomId: string }) {
     socketRef.current?.emit('start_game', {});
   }
 
+  function rollDice() {
+    socketRef.current?.emit('roll_dice', {});
+  }
+
+  function buyProperty(propertyId: number) {
+    socketRef.current?.emit('buy_property', { property_id: propertyId });
+  }
+
+  function buildHouse(propertyId: number) {
+    socketRef.current?.emit('build_house', { property_id: propertyId });
+  }
+
+  function mortgageProperty(propertyId: number) {
+    socketRef.current?.emit('mortgage_property', { property_id: propertyId });
+  }
+
+  function declareBankruptcy() {
+    socketRef.current?.emit('declare_bankruptcy', {});
+  }
+
+  function endTurn() {
+    socketRef.current?.emit('end_turn', {});
+  }
+
   if (isLoading) {
     return (
       <div className="grid min-h-[60vh] place-items-center">
@@ -254,14 +314,50 @@ export function RoomClient({ roomId }: { roomId: string }) {
       {error ? <p className="mb-4 rounded-md bg-red-50 p-3 text-sm text-danger">{error}</p> : null}
 
       <div className="grid gap-5 xl:grid-cols-[1fr_320px]">
-        <GameBoard players={players} properties={properties} />
+        <GameBoard players={players} properties={properties} roomProperties={state?.properties ?? []} />
         <div className="space-y-5">
+          {state?.dice ? (
+            <Card className="p-4">
+              <h2 className="text-lg font-bold">Dice</h2>
+              <p className="mt-2 text-sm text-slate-600">
+                {state.dice.dice_1} + {state.dice.dice_2} ={' '}
+                <span className="font-bold text-slate-950">{state.dice.total}</span>
+              </p>
+              {state.dice.is_double ? <p className="text-xs font-semibold text-secondary">Double</p> : null}
+            </Card>
+          ) : null}
           <ActionPanel
             isConnected={isConnected}
+            onBuildHouse={buildHouse}
+            onBuyProperty={buyProperty}
+            onDeclareBankruptcy={declareBankruptcy}
+            onEndTurn={endTurn}
+            onMortgageProperty={mortgageProperty}
+            onRollDice={rollDice}
             onStartGame={startGame}
+            ownedBuildablePropertyId={
+              state?.properties.find(
+                (propertyState) =>
+                  propertyState.owner_id === session?.playerId &&
+                  !propertyState.is_mortgaged &&
+                  properties.find((property) => property.id === propertyState.property_id)?.type === 'city',
+              )?.property_id ?? null
+            }
+            ownedMortgageablePropertyId={
+              state?.properties.find(
+                (propertyState) =>
+                  propertyState.owner_id === session?.playerId &&
+                  !propertyState.is_mortgaged &&
+                  propertyState.house_count === 0 &&
+                  propertyState.hotel_count === 0,
+              )?.property_id ?? null
+            }
+            pendingAction={state?.pending_action ?? null}
             playerCount={players.length}
+            roomProperties={state?.properties ?? []}
             session={session}
             status={activeRoom.status}
+            turn={state?.turn}
           />
           <PlayerList currentTurnPlayerId={currentTurnPlayerId} players={players} />
         </div>

@@ -1,4 +1,4 @@
-import { PropertyTile, RoomPlayer } from '@/shared/api/types';
+import { PropertyTile, RealtimeRoomProperty, RoomPlayer } from '@/shared/api/types';
 import { formatCurrency } from '@/shared/lib/format';
 
 const colorClasses: Record<string, string> = {
@@ -14,9 +14,11 @@ const colorClasses: Record<string, string> = {
 
 export function BoardTile({
   players,
+  roomProperty,
   tile,
 }: {
   players: RoomPlayer[];
+  roomProperty?: RealtimeRoomProperty;
   tile: PropertyTile;
 }) {
   return (
@@ -27,6 +29,13 @@ export function BoardTile({
         <span className="text-slate-500">
           {tile.price ? formatCurrency(tile.price) : tile.type.replace('_', ' ')}
         </span>
+        {roomProperty?.owner_id ? (
+          <span className="truncate rounded bg-slate-100 px-1 py-0.5 text-[9px] font-semibold text-slate-700">
+            {roomProperty.is_mortgaged ? 'Mortgaged' : `Owner ${roomProperty.owner_id.slice(0, 4)}`}
+            {roomProperty.hotel_count ? ' · Hotel' : ''}
+            {roomProperty.house_count ? ` · H${roomProperty.house_count}` : ''}
+          </span>
+        ) : null}
       </div>
       {players.length > 0 ? (
         <div className="absolute bottom-1 right-1 flex -space-x-1">

@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { RedisService } from '../../infrastructure/redis/redis.service';
+import { GameplayState } from './realtime.types';
 
 const reconnectTtlSeconds = 5 * 60;
 const chatWindowSeconds = 10;
 const maxChatMessagesPerWindow = 5;
+const gameplayStateTtlSeconds = 60 * 60 * 24;
 
 export type PlayerConnectionState = {
   is_connected: boolean;
@@ -71,6 +73,19 @@ export class RealtimeStateStore {
     return count <= maxChatMessagesPerWindow;
   }
 
+  async getGameplayState(roomId: string): Promise<GameplayState | null> {
+    const raw = await this.redisService.get(this.gameplayStateKey(roomId));
+    return raw ? (JSON.parse(raw) as GameplayState) : null;
+  }
+
+  async setGameplayState(roomId: string, state: GameplayState): Promise<void> {
+    await this.redisService.set(
+      this.gameplayStateKey(roomId),
+      JSON.stringify(state),
+      gameplayStateTtlSeconds,
+    );
+  }
+
   private socketKey(socketId: string): string {
     return `socket:${socketId}`;
   }
@@ -85,5 +100,9 @@ export class RealtimeStateStore {
 
   private chatRateKey(roomId: string, playerId: string): string {
     return `room:${roomId}:player:${playerId}:chat_rate`;
+  }
+
+  private gameplayStateKey(roomId: string): string {
+    return `room:${roomId}:gameplay_state`;
   }
 }

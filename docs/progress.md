@@ -2,6 +2,21 @@
 
 ## Completed
 
+- Phase 6 Gameplay:
+  - Added server-authoritative gameplay state for turn phase, dice, pending actions, jailed players, room properties, and winner state.
+  - Initialized `room_properties` when a game starts.
+  - Added Socket.IO gameplay events for `roll_dice`, `buy_property`, `build_house`, `mortgage_property`, `unmortgage_property`, `declare_bankruptcy`, and `end_turn`.
+  - Implemented server-side dice rolling, player movement, START bonus, double tracking, and triple-double jail handling.
+  - Implemented basic jail handling with automatic fine before the next roll when the player has enough cash.
+  - Implemented unowned property purchase through pending action validation.
+  - Implemented automatic rent payment, mortgaged-property rent skip, and debt-to-bankruptcy pending state.
+  - Implemented color-set validation and even build rule for house/hotel construction.
+  - Implemented mortgage/unmortgage flow for owned properties without buildings.
+  - Implemented tax tiles, go-to-jail tile, free parking/passive tiles, and MVP static Chance/Community Chest money effects.
+  - Implemented bankruptcy declaration, asset transfer to creditor, and winner detection when one active player remains.
+  - Extended frontend realtime contracts and room UI to render dice, property ownership/building/mortgage state, and enable gameplay actions from authoritative state.
+  - Added backend tests for gameplay state initialization, roll/movement, property purchase, and out-of-turn validation.
+  - Verified Phase 6 through lint, typecheck, test, and build.
 - Phase 5 Frontend:
   - Added frontend API client and shared TypeScript contracts for room, player, property, realtime state, chat, create room, and join room flows.
   - Added local room session persistence for guest/player identity used by Socket.IO reconnect.
@@ -85,13 +100,13 @@
 
 ## Remaining
 
-- Phase 6 gameplay engine.
 - Phase 7 testing and coverage gate.
 - Finalize invite-only room model.
 - Finalize turn timer field and timeout behavior.
 - Finalize ready status model for waiting room.
-- Finalize full board tile index, tax values, utilities, stations, jail, and go-to-jail positions.
-- Finalize Chance and Community Chest card deck and effects.
+- Finalize full auction behavior when players decline property purchase.
+- Finalize full Chance and Community Chest card deck and advanced effects.
+- Finalize jail choices for fine/card/double attempts instead of the current MVP automatic fine on next roll.
 - Decide whether auction, spectator, trade, and host end-game behavior are in MVP scope.
 
 ## Blockers / Known Issues
@@ -104,3 +119,5 @@
 - Sitemap includes ready status, but the current database/API docs do not define ready state.
 - Design/components mention trade UI, while PRD lists trading as a future feature.
 - Reconnect currently uses room/player identity and Redis socket state; durable guest session token mechanics still need frontend/session hardening.
+- Phase 6 uses static MVP Chance/Community Chest effects because complete card deck data is not specified in the PRD/game-rules.
+- Phase 6 leaves unbought properties unowned if the player ends turn; auction is explicitly optional in game-rules but still mentioned in PRD flow.
