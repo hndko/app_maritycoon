@@ -1,0 +1,72 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: maritycoon-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: maritycoon
+      POSTGRES_USER: maritycoon
+      POSTGRES_PASSWORD: maritycoon
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U maritycoon -d maritycoon"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: maritycoon-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: maritycoon-backend
+    restart: unless-stopped
+    env_file:
+      - backend/.env.example
+    environment:
+      DATABASE_URL: postgresql://maritycoon:maritycoon@postgres:5432/maritycoon
+      REDIS_URL: redis://redis:6379
+      PORT: 4000
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: maritycoon-frontend
+    restart: unless-stopped
+    env_file:
+      - frontend/.env.example
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:4000
+      NEXT_PUBLIC_SOCKET_URL: http://localhost:4000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  postgres-data:
+  redis-data:

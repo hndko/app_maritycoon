@@ -2,6 +2,15 @@
 
 ## Completed
 
+- Phase 1 Project Setup:
+  - Added npm workspace structure for `frontend` and `backend`.
+  - Added Next.js TypeScript frontend shell with Tailwind design tokens.
+  - Added NestJS TypeScript backend shell with validation, CORS, Helmet, and health endpoint.
+  - Added Docker Compose stack for frontend, backend, PostgreSQL, and Redis.
+  - Added frontend and backend Dockerfiles.
+  - Added root quality scripts for lint, typecheck, test, build, and dev.
+  - Added environment example files for root, frontend, and backend.
+  - Verified lint, typecheck, test, build, production audit, and local boot smoke tests.
 - Added initial root `.gitignore` for the planned Next.js, NestJS, Docker, PostgreSQL, Redis, test, cache, environment, and local-tool artifacts.
 - Renamed main documentation files to use sequential numeric prefixes from `01` through `15`.
 - Read all existing documents in `docs`.
@@ -24,13 +33,11 @@
 
 ## In Progress
 
-- Planning gate before Phase 1 coding.
 - Keep `.gitignore` updated as project tooling and generated artifacts are added.
 - Keep documentation numbering updated when new long-lived docs are added.
 
 ## Pending
 
-- Phase 1 project setup.
 - Phase 2 database migrations and seed.
 - Phase 3 backend API.
 - Phase 4 realtime Socket.IO.
@@ -47,7 +54,9 @@
 
 ## Known Issues
 
-- Repository currently has no executable lint/typecheck/test scripts because no project package or test configuration exists yet.
+- Vitest currently has no test files because Phase 1 only establishes the project skeleton; real unit/integration/E2E suites begin in later phases.
+- Full 80% coverage gate is pending until implementation/test phases add executable product code.
+- `npm audit` still reports dev-only vulnerabilities, while production audit (`npm audit --omit=dev`) is clean.
 - PRD requires invite-only rooms, but the current database/API docs do not define invite tokens or allowlists.
 - PRD includes turn timer input, but the current database/API docs do not define timer persistence or realtime timeout events.
 - Sitemap includes ready status, but the current database/API docs do not define ready state.
