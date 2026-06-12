@@ -1,9 +1,6 @@
 export function getDatabaseUrl(): string {
-  const databaseUrl = process.env.DATABASE_URL;
-
-  if (!databaseUrl) {
-    throw new Error('DATABASE_URL is required');
-  }
-
-  return databaseUrl;
+  return (
+    process.env.DATABASE_URL ??
+    'postgresql://maritycoon:maritycoon@localhost:5432/maritycoon'
+  );
 }

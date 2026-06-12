@@ -2,6 +2,19 @@
 
 ## Completed
 
+- Phase 3 Backend API:
+  - Added PostgreSQL-backed database module and injectable database service for NestJS repositories.
+  - Added guest creation API at `POST /api/guests`.
+  - Added room creation API at `POST /api/rooms` with host guest/player creation, unique room code generation, password hashing, visibility handling, starting money, and turn timer persistence.
+  - Added public room listing API at `GET /api/rooms/public` with status, max player, and full-room filters.
+  - Added room join API at `POST /api/rooms/join` with password-required, invalid-password, finished-room, and full-room validation.
+  - Added room detail and player listing APIs at `GET /api/rooms/:roomId` and `GET /api/rooms/:roomId/players`.
+  - Added read-only board property API at `GET /api/game/properties`.
+  - Added repository pattern for guests, rooms, and game read models.
+  - Added basic REST rate limiting guard.
+  - Added backend service/controller tests for guest and room API behavior.
+  - Fixed backend Docker production image so workspace runtime dependencies are available from the backend container.
+  - Verified Phase 3 through lint, typecheck, test, build, production audit, and Docker Compose API smoke test.
 - Phase 2 Database:
   - Added PostgreSQL initial schema migration for guest users, rooms, room players, master properties, room properties, game logs, enums, constraints, and indexes.
   - Added migration runner and `db:migrate` script.
@@ -45,9 +58,8 @@
 - Keep `.gitignore` updated as project tooling and generated artifacts are added.
 - Keep documentation numbering updated when new long-lived docs are added.
 
-## Pending
+## Remaining
 
-- Phase 3 backend API.
 - Phase 4 realtime Socket.IO.
 - Phase 5 frontend pages and game UI.
 - Phase 6 gameplay engine.
@@ -59,7 +71,7 @@
 - Finalize Chance and Community Chest card deck and effects.
 - Decide whether auction, spectator, trade, and host end-game behavior are in MVP scope.
 
-## Known Issues
+## Blockers / Known Issues
 
 - Frontend still has no test files because frontend feature implementation starts in later phases.
 - Full 80% coverage gate is pending until more product code exists.
