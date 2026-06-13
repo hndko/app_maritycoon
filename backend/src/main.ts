@@ -1,16 +1,16 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import helmet from 'helmet';
+import { validateEnvironment } from './infrastructure/config/env.validation';
 import { AppModule } from './modules/app.module';
 
 async function bootstrap() {
+  const config = validateEnvironment();
   const app = await NestFactory.create(AppModule);
-  const corsOrigin = process.env.CORS_ORIGIN ?? 'http://localhost:3000';
-  const port = Number(process.env.PORT ?? 4000);
 
   app.use(helmet());
   app.enableCors({
-    origin: corsOrigin,
+    origin: config.corsOrigin,
     credentials: true
   });
   app.useGlobalPipes(
@@ -22,7 +22,7 @@ async function bootstrap() {
   );
   app.setGlobalPrefix('api');
 
-  await app.listen(port);
+  await app.listen(config.port);
 }
 
 void bootstrap();

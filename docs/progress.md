@@ -2,6 +2,20 @@
 
 ## Completed
 
+- Production Hardening Phase:
+  - Added Redis Socket.IO adapter support so realtime broadcasts can fan out across multiple backend instances.
+  - Added Redis-backed distributed turn-timer locks to prevent duplicate timeout execution in multi-instance deployments.
+  - Added restart recovery for active turn timers by scanning Redis gameplay state and PostgreSQL playing rooms during gateway initialization.
+  - Hardened session-token signing and verification through centralized environment validation.
+  - Added production environment validation for database, Redis, CORS origin, port, and strong session secret requirements.
+  - Expanded health checks to verify PostgreSQL and Redis readiness instead of returning only static service health.
+  - Added structured realtime logs for Redis adapter setup, timer scheduling/recovery, socket joins, socket errors, and timeout processing.
+  - Added PostgreSQL integration test command gated by `DATABASE_URL_TEST`.
+  - Added Socket.IO integration test command gated by `SOCKET_TEST_URL`.
+  - Added multiplayer E2E smoke script for running against a live backend.
+  - Added Socket.IO load-test script with configurable client count and latency output.
+  - Updated environment examples and `.gitignore` for production hardening and test/load artifacts.
+  - Verified through lint, typecheck, test, build, and opt-in integration command dry-runs.
 - MVP missing-item implementation:
   - Tightened waiting-room UX so host Start Game is disabled until all non-host players are ready.
   - Added editable host room settings form in the room UI for room name, max players, starting money, and turn timer.
@@ -133,6 +147,7 @@
 
 - Keep `.gitignore` updated as project tooling and generated artifacts are added.
 - Keep documentation numbering updated when new long-lived docs are added.
+- Production hardening validation against live PostgreSQL/Redis/staging backend when environment URLs are available.
 
 ## Remaining
 
@@ -145,6 +160,8 @@
 - Coverage gates are scoped to unit-testable frontend component/helper/session code and backend application/domain services. Full browser E2E coverage for Next route clients remains future hardening.
 - `npm audit` still reports dev-only vulnerabilities, while production audit (`npm audit --omit=dev`) is clean.
 - Local host PostgreSQL connection using `localhost:5432` may collide with Windows/Laragon networking; Docker Compose service-to-service verification works using the backend container and `postgres` hostname.
+- Production hardening integration tests are present but skip by default unless `DATABASE_URL_TEST` and `SOCKET_TEST_URL` are configured.
+- Backend coverage command currently fails the global 80% threshold on the broad service coverage surface; required lint/typecheck/test gates pass.
 - Design/components mention trade UI, while PRD lists trading as a future feature.
 - Reconnect currently uses room/player identity and Redis socket state; durable guest session token mechanics still need frontend/session hardening.
 - Phase 6 leaves unbought properties unowned if the player ends turn; auction is explicitly optional in game-rules but still mentioned in PRD flow.

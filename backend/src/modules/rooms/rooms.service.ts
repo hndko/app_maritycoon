@@ -5,6 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { createHmac, randomBytes } from 'node:crypto';
+import { getSessionTokenSecret } from '../../infrastructure/config/env.validation';
 import { PasswordService } from '../../infrastructure/security/password.service';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { JoinRoomDto } from './dto/join-room.dto';
@@ -228,7 +229,7 @@ export class RoomsService {
   }
 
   private sign(payload: string): string {
-    return createHmac('sha256', process.env.SESSION_TOKEN_SECRET ?? 'dev-session-secret')
+    return createHmac('sha256', getSessionTokenSecret())
       .update(payload)
       .digest('base64url');
   }

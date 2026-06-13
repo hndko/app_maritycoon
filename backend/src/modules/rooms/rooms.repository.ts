@@ -193,6 +193,14 @@ export class RoomsRepository {
     return result.rows[0] ?? null;
   }
 
+  async listPlayingRoomIds(): Promise<string[]> {
+    const result = await this.database.query<{ id: string }>(
+      "SELECT id FROM rooms WHERE status = 'playing'",
+    );
+
+    return result.rows.map((room) => room.id);
+  }
+
   async countPlayers(roomId: string): Promise<number> {
     const result = await this.database.query<{ count: string }>(
       'SELECT COUNT(*) AS count FROM room_players WHERE room_id = $1',

@@ -33,6 +33,8 @@ pnpm-debug.log*
 # Testing
 playwright-report/
 test-results/
+load-results/
+*.har
 
 # Docker and local database volumes
 docker/data/

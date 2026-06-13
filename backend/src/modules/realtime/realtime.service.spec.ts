@@ -31,6 +31,20 @@ class MemoryRedisService {
     this.values.set(key, String(nextValue));
     return nextValue;
   }
+
+  async scanKeys(pattern: string): Promise<string[]> {
+    const regex = new RegExp(`^${pattern.replaceAll('*', '.*')}$`);
+    return [...this.values.keys()].filter((key) => regex.test(key));
+  }
+
+  async acquireLock(key: string, owner: string): Promise<boolean> {
+    if (this.values.has(key)) {
+      return false;
+    }
+
+    this.values.set(key, owner);
+    return true;
+  }
 }
 
 const roomA: RoomRecord = {
@@ -169,6 +183,9 @@ function createHarness() {
 
   const roomsRepository = {
     findById: vi.fn(async (roomId: string) => rooms.get(roomId) ?? null),
+    listPlayingRoomIds: vi.fn(async () =>
+      [...rooms.values()].filter((room) => room.status === 'playing').map((room) => room.id),
+    ),
     findPlayerInRoom: vi.fn(async (roomId: string, playerId: string) => {
       return players.find((player) => player.room_id === roomId && player.id === playerId) ?? null;
     }),

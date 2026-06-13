@@ -8,6 +8,7 @@ const maxChatMessagesPerWindow = 5;
 const actionWindowSeconds = 5;
 const maxActionsPerWindow = 10;
 const gameplayStateTtlSeconds = 60 * 60 * 24;
+const turnLockTtlMilliseconds = 15_000;
 
 export type PlayerConnectionState = {
   is_connected: boolean;
@@ -105,6 +106,22 @@ export class RealtimeStateStore {
     await this.bumpStateVersion(roomId);
   }
 
+  async listGameplayRoomIds(): Promise<string[]> {
+    const keys = await this.redisService.scanKeys('room:*:gameplay_state');
+
+    return keys
+      .map((key) => key.match(/^room:(.+):gameplay_state$/)?.[1])
+      .filter((roomId): roomId is string => Boolean(roomId));
+  }
+
+  async acquireTurnTimerLock(roomId: string, owner: string): Promise<boolean> {
+    return this.redisService.acquireLock(
+      this.turnTimerLockKey(roomId),
+      owner,
+      turnLockTtlMilliseconds,
+    );
+  }
+
   private socketKey(socketId: string): string {
     return `socket:${socketId}`;
   }
@@ -127,5 +144,9 @@ export class RealtimeStateStore {
 
   private gameplayStateKey(roomId: string): string {
     return `room:${roomId}:gameplay_state`;
+  }
+
+  private turnTimerLockKey(roomId: string): string {
+    return `room:${roomId}:turn_timer_lock`;
   }
 }

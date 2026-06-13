@@ -7,7 +7,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
+import { getSessionTokenSecret } from '../../infrastructure/config/env.validation';
 import { GameRepository } from '../game/game.repository';
 import { RoomPlayerRecord, RoomsRepository } from '../rooms/rooms.repository';
 import { ChatMessageSocketDto } from './dto/chat-message-socket.dto';
@@ -135,6 +136,8 @@ const communityChestCards: readonly CardDefinition[] = [
 
 @Injectable()
 export class RealtimeService {
+  private readonly timerLockOwner = `realtime:${process.pid}:${randomUUID()}`;
+
   constructor(
     private readonly roomsRepository: RoomsRepository,
     private readonly gameRepository: GameRepository,
@@ -988,7 +991,59 @@ export class RealtimeService {
       return null;
     }
 
-    return this.skipCurrentTurn(roomId, gameplay, 'turn_timer_expired');
+    const hasLock = await this.stateStore.acquireTurnTimerLock(roomId, this.timerLockOwner);
+
+    if (!hasLock) {
+      return null;
+    }
+
+    const lockedGameplay = await this.stateStore.getGameplayState(roomId);
+
+    if (
+      !lockedGameplay ||
+      !lockedGameplay.turn_deadline_at ||
+      lockedGameplay.phase === 'finished' ||
+      Date.parse(lockedGameplay.turn_deadline_at) > Date.now()
+    ) {
+      return null;
+    }
+
+    return this.skipCurrentTurn(roomId, lockedGameplay, 'turn_timer_expired');
+  }
+
+  async listActiveTurnTimers(): Promise<Array<{
+    roomId: string;
+    deadlineAt: string;
+    phase: GameplayState['phase'];
+  }>> {
+    const roomIds = new Set([
+      ...(await this.stateStore.listGameplayRoomIds()),
+      ...(await this.roomsRepository.listPlayingRoomIds()),
+    ]);
+    const timers: Array<{
+      roomId: string;
+      deadlineAt: string;
+      phase: GameplayState['phase'];
+    }> = [];
+
+    for (const roomId of roomIds) {
+      const room = await this.roomsRepository.findById(roomId);
+      const gameplay = await this.stateStore.getGameplayState(roomId);
+
+      if (
+        room?.status === 'playing' &&
+        gameplay?.turn_deadline_at &&
+        gameplay.phase !== 'finished'
+      ) {
+        timers.push({
+          roomId,
+          deadlineAt: gameplay.turn_deadline_at,
+          phase: gameplay.phase,
+        });
+      }
+    }
+
+    return timers;
   }
 
   private async assertSocketActionAllowed(
@@ -1608,7 +1663,7 @@ export class RealtimeService {
   }
 
   private isValidSignature(payload: string, signature: string): boolean {
-    const expected = createHmac('sha256', process.env.SESSION_TOKEN_SECRET ?? 'dev-session-secret')
+    const expected = createHmac('sha256', getSessionTokenSecret())
       .update(payload)
       .digest('base64url');
     const actualBuffer = Buffer.from(signature);

@@ -1,13 +1,16 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import Redis from 'ioredis';
+import type { Redis as RedisClient } from 'ioredis';
 import { getRedisUrl } from './redis.config';
 
 @Injectable()
 export class RedisService implements OnModuleDestroy {
+  private readonly redisUrl = getRedisUrl();
   private readonly client = new Redis(getRedisUrl(), {
     lazyConnect: true,
     maxRetriesPerRequest: 1,
   });
+  private readonly duplicateClients = new Set<RedisClient>();
 
   async get(key: string): Promise<string | null> {
     await this.ensureConnected();
@@ -30,6 +33,11 @@ export class RedisService implements OnModuleDestroy {
     await this.client.del(key);
   }
 
+  async ping(): Promise<string> {
+    await this.ensureConnected();
+    return this.client.ping();
+  }
+
   async incr(key: string, ttlSeconds: number): Promise<number> {
     await this.ensureConnected();
     const count = await this.client.incr(key);
@@ -41,7 +49,47 @@ export class RedisService implements OnModuleDestroy {
     return count;
   }
 
+  async scanKeys(pattern: string, count = 100): Promise<string[]> {
+    await this.ensureConnected();
+    const keys: string[] = [];
+    let cursor = '0';
+
+    do {
+      const [nextCursor, batch] = await this.client.scan(
+        cursor,
+        'MATCH',
+        pattern,
+        'COUNT',
+        count,
+      );
+      cursor = nextCursor;
+      keys.push(...batch);
+    } while (cursor !== '0');
+
+    return keys;
+  }
+
+  async acquireLock(key: string, owner: string, ttlMilliseconds: number): Promise<boolean> {
+    await this.ensureConnected();
+    const result = await this.client.set(key, owner, 'PX', ttlMilliseconds, 'NX');
+    return result === 'OK';
+  }
+
+  createDuplicateClient(): RedisClient {
+    const duplicate = new Redis(this.redisUrl, {
+      lazyConnect: true,
+      maxRetriesPerRequest: 1,
+    });
+
+    this.duplicateClients.add(duplicate);
+    return duplicate;
+  }
+
   async onModuleDestroy(): Promise<void> {
+    for (const duplicate of this.duplicateClients) {
+      duplicate.disconnect();
+    }
+
     this.client.disconnect();
   }
 

@@ -4,8 +4,10 @@ import {
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
+import { createAdapter } from '@socket.io/redis-adapter';
 import {
   ConnectedSocket,
+  OnGatewayInit,
   MessageBody,
   OnGatewayDisconnect,
   SubscribeMessage,
@@ -21,6 +23,7 @@ import { PlayerActionSocketDto } from './dto/player-action-socket.dto';
 import { PropertyActionSocketDto } from './dto/property-action-socket.dto';
 import { ReadyStatusSocketDto } from './dto/ready-status-socket.dto';
 import { RoomSettingsSocketDto } from './dto/room-settings-socket.dto';
+import { RedisService } from '../../infrastructure/redis/redis.service';
 import { RealtimeService } from './realtime.service';
 import { socketRoomPrefix, SocketErrorPayload, SocketSession } from './realtime.types';
 
@@ -37,14 +40,22 @@ import { socketRoomPrefix, SocketErrorPayload, SocketSession } from './realtime.
     transform: true,
   }),
 )
-export class RealtimeGateway implements OnGatewayDisconnect {
+export class RealtimeGateway implements OnGatewayDisconnect, OnGatewayInit {
   private readonly logger = new Logger(RealtimeGateway.name);
   private readonly turnTimers = new Map<string, NodeJS.Timeout>();
 
   @WebSocketServer()
   server!: Server;
 
-  constructor(private readonly realtimeService: RealtimeService) {}
+  constructor(
+    private readonly realtimeService: RealtimeService,
+    private readonly redisService: RedisService,
+  ) {}
+
+  async afterInit(server: Server): Promise<void> {
+    await this.configureRedisAdapter(server);
+    await this.recoverTurnTimers();
+  }
 
   @SubscribeMessage('join_room')
   async joinRoom(
@@ -66,6 +77,7 @@ export class RealtimeGateway implements OnGatewayDisconnect {
       socket.emit('room_state_update', state);
       socket.to(this.roomName(payload.room_id)).emit('room_state_update', state);
       this.scheduleTurnTimeout(payload.room_id, state);
+      this.logger.log(`socket_joined room=${payload.room_id} player=${payload.player_id}`);
     } catch (error) {
       this.emitError(socket, error);
     }
@@ -84,6 +96,34 @@ export class RealtimeGateway implements OnGatewayDisconnect {
       this.server.to(this.roomName(session.roomId)).emit('chat_broadcast', broadcast);
     } catch (error) {
       this.emitError(socket, error);
+    }
+  }
+
+  private async configureRedisAdapter(server: Server): Promise<void> {
+    const pubClient = this.redisService.createDuplicateClient();
+    const subClient = this.redisService.createDuplicateClient();
+
+    try {
+      await Promise.all([pubClient.connect(), subClient.connect()]);
+      server.adapter(createAdapter(pubClient, subClient));
+      this.logger.log('socket_redis_adapter_enabled');
+    } catch (error) {
+      this.logger.error(`socket_redis_adapter_failed ${String(error)}`);
+      throw error;
+    }
+  }
+
+  private async recoverTurnTimers(): Promise<void> {
+    try {
+      const timers = await this.realtimeService.listActiveTurnTimers();
+
+      for (const timer of timers) {
+        this.scheduleTurnDeadline(timer.roomId, timer.deadlineAt, timer.phase);
+      }
+
+      this.logger.log(`turn_timer_recovery_complete count=${timers.length}`);
+    } catch (error) {
+      this.logger.warn(`turn_timer_recovery_failed ${String(error)}`);
     }
   }
 
@@ -433,6 +473,7 @@ export class RealtimeGateway implements OnGatewayDisconnect {
       message: error instanceof Error ? error.message : 'Unexpected socket error',
     };
 
+    this.logger.warn(`socket_error socket=${socket.id} message="${payload.message}"`);
     socket.emit('error', payload);
   }
 
@@ -451,12 +492,28 @@ export class RealtimeGateway implements OnGatewayDisconnect {
       return;
     }
 
-    const delay = Math.max(0, Date.parse(state.turn.deadline_at) - Date.now());
+    this.scheduleTurnDeadline(roomId, state.turn.deadline_at, state.turn.phase);
+  }
+
+  private scheduleTurnDeadline(roomId: string, deadlineAt: string, phase: string): void {
+    const existing = this.turnTimers.get(roomId);
+
+    if (existing) {
+      clearTimeout(existing);
+      this.turnTimers.delete(roomId);
+    }
+
+    if (phase === 'finished') {
+      return;
+    }
+
+    const delay = Math.max(0, Date.parse(deadlineAt) - Date.now());
     const timer = setTimeout(() => {
       void this.handleTurnTimeout(roomId);
     }, delay);
 
     this.turnTimers.set(roomId, timer);
+    this.logger.debug(`turn_timer_scheduled room=${roomId} delay_ms=${delay}`);
   }
 
   private async handleTurnTimeout(roomId: string): Promise<void> {
@@ -471,6 +528,7 @@ export class RealtimeGateway implements OnGatewayDisconnect {
 
       this.server.to(roomName).emit('room_state_update', state);
       this.scheduleTurnTimeout(roomId, state);
+      this.logger.log(`turn_timer_processed room=${roomId} changed=${Boolean(turnChanged)}`);
     } catch (error) {
       this.logger.warn(`Failed to process turn timeout: ${String(error)}`);
     }
