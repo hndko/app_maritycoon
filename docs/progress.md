@@ -2,6 +2,10 @@
 
 ## Completed
 
+- Documentation refresh:
+  - Added Indonesian portfolio-style `README.md` with technology badges, product overview, architecture summary, setup commands, quality gates, documentation links, and living-document maintenance notes.
+  - Added `AGENTS.md` with project-specific AI/contributor workflow, source-of-truth priority, implementation rules, git workflow, testing notes, security/reliability requirements, and out-of-scope areas.
+  - Added GitHub short description recommendation for the repository.
 - Production Hardening Phase:
   - Added Redis Socket.IO adapter support so realtime broadcasts can fan out across multiple backend instances.
   - Added Redis-backed distributed turn-timer locks to prevent duplicate timeout execution in multi-instance deployments.
@@ -147,6 +151,7 @@
 
 - Keep `.gitignore` updated as project tooling and generated artifacts are added.
 - Keep documentation numbering updated when new long-lived docs are added.
+- Keep `README.md` and `AGENTS.md` updated whenever features, commands, architecture, deployment, or workflow rules change.
 - Production hardening validation against live PostgreSQL/Redis/staging backend when environment URLs are available.
 
 ## Remaining
