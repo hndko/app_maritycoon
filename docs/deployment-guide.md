@@ -230,7 +230,13 @@ Hapus deployment beserta volume PostgreSQL, Redis, dan Prometheus:
 ./remove-deploy.sh --volumes
 ```
 
-Mode `--volumes` akan meminta konfirmasi `DELETE` karena data database akan hilang. Buat backup terlebih dahulu:
+Hapus seluruh deployment Docker, termasuk containers, networks, volumes, dan semua images yang dipakai Compose services:
+
+```bash
+./remove-deploy.sh --all
+```
+
+Mode `--volumes` akan meminta konfirmasi `DELETE`; mode `--all` akan meminta konfirmasi `DELETE ALL` karena data database dan image Docker akan dihapus. Perintah ini tidak menghapus file repo, `.env.production`, folder `backups/`, atau file sertifikat TLS. Buat backup terlebih dahulu:
 
 ```bash
 ./backup.sh

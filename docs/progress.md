@@ -7,6 +7,7 @@
   - Added `docs/17. Closed-Beta-Launch-Package.md` with launch plan, tester instructions, bug reporting template, feedback collection template, rollback plan, and go/no-go checklist for 20-50 testers.
 - Deployment operations:
   - Added `remove-deploy.sh` to stop and remove the production Docker deployment, with explicit opt-in flags for volume and local image removal.
+  - Added `remove-deploy.sh --all` for full Docker deployment cleanup, including Compose service images and persistent Docker volumes, guarded by `DELETE ALL` confirmation.
 - Staging validation readiness:
   - Added `docs/16. Staging-Validation-Checklist.md` with QA-ready 2-player, 4-player, and 8-player staging scenarios covering create room, join room, invite room, reconnect, disconnect, turn timer, property buy, rent, jail, bankruptcy, winner, and Play Again.
 - Production readiness critical/high remediation:

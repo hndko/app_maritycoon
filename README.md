@@ -173,6 +173,12 @@ Remove deployment tanpa menghapus volume database:
 ./remove-deploy.sh
 ```
 
+Remove seluruh deployment Docker termasuk volume dan image service:
+
+```bash
+./remove-deploy.sh --all
+```
+
 ## Quality Gates
 
 Perintah wajib sebelum commit:

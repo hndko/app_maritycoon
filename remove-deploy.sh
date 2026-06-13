@@ -5,6 +5,7 @@ ENV_FILE="${ENV_FILE:-.env.production}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.production.yml}"
 REMOVE_VOLUMES=false
 REMOVE_LOCAL_IMAGES=false
+REMOVE_ALL=false
 
 usage() {
   cat <<'EOF'
@@ -15,6 +16,7 @@ Stops and removes the MariTycoon production Docker deployment.
 Options:
   --volumes      Also remove Docker volumes. This deletes PostgreSQL, Redis, and Prometheus data.
   --rmi-local    Also remove local images built by Docker Compose.
+  --all          Remove containers, networks, volumes, and all images used by Compose services.
   --help         Show this help message.
 
 Environment:
@@ -25,7 +27,7 @@ Safe default:
   ./remove-deploy.sh
 
 Full wipe:
-  ./remove-deploy.sh --volumes --rmi-local
+  ./remove-deploy.sh --all
 EOF
 }
 
@@ -36,6 +38,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --rmi-local)
       REMOVE_LOCAL_IMAGES=true
+      ;;
+    --all)
+      REMOVE_ALL=true
+      REMOVE_VOLUMES=true
       ;;
     --help|-h)
       usage
@@ -57,7 +63,25 @@ fi
 
 DOWN_ARGS="--remove-orphans"
 
-if [ "${REMOVE_VOLUMES}" = "true" ]; then
+if [ "${REMOVE_ALL}" = "true" ]; then
+  cat <<'EOF'
+WARNING: --all will delete the whole Docker deployment.
+This removes containers, networks, PostgreSQL data, Redis data, Prometheus data,
+and all images used by the Compose services.
+
+This does not delete repository files, .env.production, backups/, or TLS cert files.
+Make sure you have a fresh backup before continuing.
+EOF
+  printf "Type DELETE ALL to continue: "
+  read -r CONFIRMATION
+
+  if [ "${CONFIRMATION}" != "DELETE ALL" ]; then
+    echo "Aborted."
+    exit 1
+  fi
+
+  DOWN_ARGS="${DOWN_ARGS} --volumes --rmi all"
+elif [ "${REMOVE_VOLUMES}" = "true" ]; then
   cat <<'EOF'
 WARNING: --volumes will delete persistent Docker volumes.
 This removes PostgreSQL data, Redis data, and Prometheus data for this deployment.
@@ -74,7 +98,7 @@ EOF
   DOWN_ARGS="${DOWN_ARGS} --volumes"
 fi
 
-if [ "${REMOVE_LOCAL_IMAGES}" = "true" ]; then
+if [ "${REMOVE_LOCAL_IMAGES}" = "true" ] && [ "${REMOVE_ALL}" != "true" ]; then
   DOWN_ARGS="${DOWN_ARGS} --rmi local"
 fi
 
