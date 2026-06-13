@@ -167,6 +167,12 @@ One-command deployment di VPS setelah environment dan SSL siap:
 ./deploy.sh
 ```
 
+Remove deployment tanpa menghapus volume database:
+
+```bash
+./remove-deploy.sh
+```
+
 ## Quality Gates
 
 Perintah wajib sebelum commit:

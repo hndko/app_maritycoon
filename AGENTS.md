@@ -157,7 +157,7 @@ Wajib dijaga:
 - Jalankan backup sebelum migration/deployment berisiko dan verifikasi restore secara berkala.
 - CI harus menjaga lint, typecheck, test, build, production Compose validation, dan Docker image build tetap hijau.
 - Monitoring production minimal harus scrape `/api/metrics` dan punya alert untuk backend down.
-- Deployment package utama untuk VPS adalah `docker-compose.production.yml`, `.env.production.example`, `nginx.conf`, `deploy.sh`, `backup.sh`, `restore.sh`, dan `docs/deployment-guide.md`.
+- Deployment package utama untuk VPS adalah `docker-compose.production.yml`, `.env.production.example`, `nginx.conf`, `deploy.sh`, `backup.sh`, `restore.sh`, `remove-deploy.sh`, dan `docs/deployment-guide.md`.
 
 ## Area yang Tidak Boleh Dikerjakan Tanpa Scope Baru
 

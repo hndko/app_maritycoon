@@ -210,6 +210,32 @@ git checkout main
 git pull origin main
 ```
 
+## Remove Deployment
+
+Hapus deployment Docker tanpa menghapus data persisten:
+
+```bash
+./remove-deploy.sh
+```
+
+Hapus deployment beserta local images hasil build Compose:
+
+```bash
+./remove-deploy.sh --rmi-local
+```
+
+Hapus deployment beserta volume PostgreSQL, Redis, dan Prometheus:
+
+```bash
+./remove-deploy.sh --volumes
+```
+
+Mode `--volumes` akan meminta konfirmasi `DELETE` karena data database akan hilang. Buat backup terlebih dahulu:
+
+```bash
+./backup.sh
+```
+
 ## Operasional Penting
 
 - Jangan expose PostgreSQL atau Redis ke internet.
