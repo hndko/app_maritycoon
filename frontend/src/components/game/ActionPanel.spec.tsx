@@ -67,8 +67,10 @@ describe('ActionPanel', () => {
         onMortgageProperty={vi.fn()}
         onRollDice={vi.fn()}
         onSellBuilding={vi.fn()}
+        onSellProperty={vi.fn()}
         onStartGame={onStartGame}
         onToggleReady={vi.fn()}
+        onUnmortgageProperty={vi.fn()}
         onUseJailCard={vi.fn()}
         allPlayersReady
         currentPlayerIsInJail={false}
@@ -76,6 +78,8 @@ describe('ActionPanel', () => {
         ownedBuildablePropertyId={null}
         ownedMortgageablePropertyId={null}
         ownedSellableBuildingPropertyId={null}
+        ownedSellablePropertyId={null}
+        ownedUnmortgageablePropertyId={null}
         pendingAction={null}
         playerCount={2}
         playerIsReady={false}
@@ -96,6 +100,8 @@ describe('ActionPanel', () => {
     const onEndTurn = vi.fn();
     const onBuildHouse = vi.fn();
     const onMortgageProperty = vi.fn();
+    const onSellProperty = vi.fn();
+    const onUnmortgageProperty = vi.fn();
 
     render(
       <ActionPanel
@@ -109,8 +115,10 @@ describe('ActionPanel', () => {
         onMortgageProperty={onMortgageProperty}
         onRollDice={onRollDice}
         onSellBuilding={vi.fn()}
+        onSellProperty={onSellProperty}
         onStartGame={vi.fn()}
         onToggleReady={vi.fn()}
+        onUnmortgageProperty={onUnmortgageProperty}
         onUseJailCard={vi.fn()}
         allPlayersReady
         currentPlayerIsInJail={false}
@@ -118,6 +126,8 @@ describe('ActionPanel', () => {
         ownedBuildablePropertyId={1}
         ownedMortgageablePropertyId={3}
         ownedSellableBuildingPropertyId={null}
+        ownedSellablePropertyId={3}
+        ownedUnmortgageablePropertyId={null}
         pendingAction={{
           player_id: 'player-a',
           price: 600000,
@@ -154,6 +164,9 @@ describe('ActionPanel', () => {
     expect(onEndTurn).not.toHaveBeenCalled();
     expect(onBuildHouse).not.toHaveBeenCalled();
     expect(onMortgageProperty).toHaveBeenCalledWith(3);
+    buttonByText('Sell Property').click();
+    expect(onSellProperty).toHaveBeenCalledWith(3);
+    expect(onUnmortgageProperty).not.toHaveBeenCalled();
     expect(container?.textContent).toContain('Properti tersedia');
     expect(container?.textContent).toContain('1 properti dimiliki');
   });
@@ -172,8 +185,10 @@ describe('ActionPanel', () => {
         onMortgageProperty={vi.fn()}
         onRollDice={vi.fn()}
         onSellBuilding={vi.fn()}
+        onSellProperty={vi.fn()}
         onStartGame={vi.fn()}
         onToggleReady={vi.fn()}
+        onUnmortgageProperty={vi.fn()}
         onUseJailCard={vi.fn()}
         allPlayersReady
         currentPlayerIsInJail={false}
@@ -181,6 +196,8 @@ describe('ActionPanel', () => {
         ownedBuildablePropertyId={null}
         ownedMortgageablePropertyId={null}
         ownedSellableBuildingPropertyId={null}
+        ownedSellablePropertyId={null}
+        ownedUnmortgageablePropertyId={null}
         pendingAction={{
           amount: 2000000,
           creditor_id: 'player-b',

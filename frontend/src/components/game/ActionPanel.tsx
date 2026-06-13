@@ -28,8 +28,10 @@ export function ActionPanel({
   onMortgageProperty,
   onRollDice,
   onSellBuilding,
+  onSellProperty,
   onStartGame,
   onToggleReady,
+  onUnmortgageProperty,
   onUseJailCard,
   allPlayersReady,
   currentPlayerIsInJail,
@@ -37,6 +39,8 @@ export function ActionPanel({
   ownedBuildablePropertyId,
   ownedMortgageablePropertyId,
   ownedSellableBuildingPropertyId,
+  ownedSellablePropertyId,
+  ownedUnmortgageablePropertyId,
   pendingAction,
   playerCount,
   playerIsReady,
@@ -55,8 +59,10 @@ export function ActionPanel({
   onMortgageProperty: (propertyId: number) => void;
   onRollDice: () => void;
   onSellBuilding: (propertyId: number) => void;
+  onSellProperty: (propertyId: number) => void;
   onStartGame: () => void;
   onToggleReady: (isReady: boolean) => void;
+  onUnmortgageProperty: (propertyId: number) => void;
   onUseJailCard: () => void;
   allPlayersReady: boolean;
   currentPlayerIsInJail: boolean;
@@ -64,6 +70,8 @@ export function ActionPanel({
   ownedBuildablePropertyId: number | null;
   ownedMortgageablePropertyId: number | null;
   ownedSellableBuildingPropertyId: number | null;
+  ownedSellablePropertyId: number | null;
+  ownedUnmortgageablePropertyId: number | null;
   pendingAction: PendingAction;
   playerCount: number;
   playerIsReady: boolean;
@@ -181,6 +189,18 @@ export function ActionPanel({
           Mortgage
         </Button>
         <Button
+          disabled={!isCurrentPlayer || ownedUnmortgageablePropertyId === null}
+          icon={<Landmark className="size-4" />}
+          onClick={() => {
+            if (ownedUnmortgageablePropertyId !== null) {
+              onUnmortgageProperty(ownedUnmortgageablePropertyId);
+            }
+          }}
+          variant="ghost"
+        >
+          Unmortgage
+        </Button>
+        <Button
           disabled={!isCurrentPlayer || ownedSellableBuildingPropertyId === null}
           icon={<BadgeX className="size-4" />}
           onClick={() => {
@@ -191,6 +211,18 @@ export function ActionPanel({
           variant="ghost"
         >
           Sell Build
+        </Button>
+        <Button
+          disabled={!isCurrentPlayer || ownedSellablePropertyId === null}
+          icon={<BadgeX className="size-4" />}
+          onClick={() => {
+            if (ownedSellablePropertyId !== null) {
+              onSellProperty(ownedSellablePropertyId);
+            }
+          }}
+          variant="ghost"
+        >
+          Sell Property
         </Button>
         <Button
           disabled={!canDeclareBankruptcy}

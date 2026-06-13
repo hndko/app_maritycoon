@@ -329,6 +329,43 @@ export class GameRepository {
     });
   }
 
+  async sellProperty(
+    roomId: string,
+    propertyId: number,
+    playerId: string,
+    refund: number,
+  ): Promise<void> {
+    await this.database.transaction(async (client) => {
+      await client.query('UPDATE room_players SET money = money + $1 WHERE id = $2', [
+        refund,
+        playerId,
+      ]);
+      await client.query(
+        `
+          UPDATE room_properties
+          SET owner_id = NULL, house_count = 0, hotel_count = 0, is_mortgaged = FALSE
+          WHERE room_id = $1
+            AND property_id = $2
+            AND owner_id = $3
+            AND house_count = 0
+            AND hotel_count = 0
+        `,
+        [roomId, propertyId, playerId],
+      );
+    });
+  }
+
+  async resetRoomPropertiesForReplay(roomId: string): Promise<void> {
+    await this.database.query(
+      `
+        UPDATE room_properties
+        SET owner_id = NULL, house_count = 0, hotel_count = 0, is_mortgaged = FALSE
+        WHERE room_id = $1
+      `,
+      [roomId],
+    );
+  }
+
   async transferPlayerAssets(roomId: string, fromPlayerId: string, toPlayerId: string | null): Promise<void> {
     await this.database.query(
       `

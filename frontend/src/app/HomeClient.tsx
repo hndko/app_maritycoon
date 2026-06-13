@@ -7,11 +7,13 @@ import { RoomList } from '@/components/rooms/RoomList';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { Select } from '@/components/ui/Select';
 import { apiClient } from '@/shared/api/client';
-import { PublicRoom } from '@/shared/api/types';
+import { PublicRoom, PublicRoomFilter } from '@/shared/api/types';
 
 export function HomeClient() {
   const [rooms, setRooms] = useState<PublicRoom[]>([]);
+  const [filter, setFilter] = useState<PublicRoomFilter>({});
   const [isLoading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,7 +22,7 @@ export function HomeClient() {
     setLoading(true);
 
     try {
-      setRooms(await apiClient.listPublicRooms());
+      setRooms(await apiClient.listPublicRooms(filter));
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Gagal memuat room');
     } finally {
@@ -83,6 +85,57 @@ export function HomeClient() {
             <p className="text-sm text-slate-600">Room publik yang tersedia.</p>
           </div>
           {isLoading ? <LoadingSpinner /> : null}
+        </div>
+        <div className="mb-4 grid gap-3 rounded-md border border-slate-200 bg-white p-3 md:grid-cols-4">
+          <Select
+            label="Status"
+            onChange={(event) =>
+              setFilter((current) => ({
+                ...current,
+                status: event.target.value ? (event.target.value as PublicRoomFilter['status']) : undefined,
+              }))
+            }
+            value={filter.status ?? ''}
+          >
+            <option value="">Semua</option>
+            <option value="waiting">Menunggu</option>
+            <option value="playing">Berlangsung</option>
+            <option value="finished">Selesai</option>
+          </Select>
+          <Select
+            label="Max Players"
+            onChange={(event) =>
+              setFilter((current) => ({
+                ...current,
+                max_players: event.target.value ? Number(event.target.value) : undefined,
+              }))
+            }
+            value={filter.max_players ?? ''}
+          >
+            <option value="">Semua</option>
+            {[2, 3, 4, 5, 6, 7, 8].map((count) => (
+              <option key={count} value={count}>{count}</option>
+            ))}
+          </Select>
+          <Select
+            label="Kapasitas"
+            onChange={(event) =>
+              setFilter((current) => ({
+                ...current,
+                full: event.target.value === '' ? undefined : event.target.value === 'true',
+              }))
+            }
+            value={filter.full === undefined ? '' : String(filter.full)}
+          >
+            <option value="">Semua</option>
+            <option value="false">Belum penuh</option>
+            <option value="true">Full room</option>
+          </Select>
+          <div className="flex items-end">
+            <Button className="w-full" icon={<RefreshCw className="size-4" />} onClick={loadRooms} variant="ghost">
+              Apply
+            </Button>
+          </div>
         </div>
         {error ? <p className="mb-4 rounded-md bg-red-50 p-3 text-sm text-danger">{error}</p> : null}
         <RoomList rooms={rooms} />

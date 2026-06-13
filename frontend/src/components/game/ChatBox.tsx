@@ -5,6 +5,9 @@ import { Send } from 'lucide-react';
 import { ChatMessage } from '@/shared/api/types';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
+import { Dropdown } from '../ui/Dropdown';
+
+const emojis = ['😀', '😂', '🔥', '🎲', '🏠', '💰', '🙏', '🎉'];
 
 export function ChatBox({
   disabled,
@@ -64,6 +67,21 @@ export function ChatBox({
           placeholder="Tulis pesan"
           value={message}
         />
+        <Dropdown label="Emoji">
+          <div className="grid grid-cols-4 gap-1">
+            {emojis.map((emoji) => (
+              <button
+                className="grid size-9 place-items-center rounded-md text-lg hover:bg-slate-100"
+                disabled={disabled}
+                key={emoji}
+                onClick={() => setMessage((current) => `${current}${emoji}`)}
+                type="button"
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        </Dropdown>
         <Button disabled={disabled} icon={<Send className="size-4" />} type="submit">
           Send
         </Button>

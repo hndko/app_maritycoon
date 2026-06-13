@@ -30,9 +30,13 @@
 - Create room dengan nama room, max player, visibility, password, starting money, dan turn timer.
 - Join room lewat share URL atau room code.
 - Public room, private room password, dan invite-only room.
+- Public lobby dengan filter status, max player, dan kapasitas room.
 - Waiting room real-time dengan ready status dan host controls.
-- Chat room real-time dengan anti-spam.
+- Chat room real-time dengan emoji, system message, dan anti-spam.
 - Gameplay server-authoritative: dice, movement, property purchase, rent, jail, bankruptcy, winner detection.
+- Property detail modal, purchase prompt, sell property, mortgage, unmortgage, dan sell building.
+- Winner dialog dengan Play Again flow untuk host.
+- Sound effects ringan dengan mute option.
 - Chance dan Community Chest MVP deck.
 - Reconnect handling dan state sync lewat Redis.
 - Production hardening untuk Socket.IO multi-instance, distributed timer, recovery, dan observability dasar.

@@ -244,6 +244,21 @@ function createHarness() {
         room.status = 'finished';
       }
     }),
+    resetRoomForReplay: vi.fn(async (roomId: string) => {
+      const room = rooms.get(roomId);
+      if (room) {
+        room.status = 'waiting';
+      }
+      players
+        .filter((player) => player.room_id === roomId)
+        .forEach((player) => {
+          player.money = 0;
+          player.position = 0;
+          player.is_bankrupt = false;
+          player.is_ready = false;
+          player.turn_order = null;
+        });
+    }),
   };
   const gameRepository = {
     appendLog,
@@ -361,6 +376,27 @@ function createHarness() {
       if (property) {
         property.is_mortgaged = false;
       }
+    }),
+    sellProperty: vi.fn(async (_roomId: string, propertyId: number, playerId: string, refund: number) => {
+      const player = players.find((item) => item.id === playerId);
+      const property = roomProperties.find((item) => item.property_id === propertyId);
+      if (player) {
+        player.money += refund;
+      }
+      if (property) {
+        property.owner_id = null;
+        property.house_count = 0;
+        property.hotel_count = 0;
+        property.is_mortgaged = false;
+      }
+    }),
+    resetRoomPropertiesForReplay: vi.fn(async () => {
+      roomProperties.forEach((property) => {
+        property.owner_id = null;
+        property.house_count = 0;
+        property.hotel_count = 0;
+        property.is_mortgaged = false;
+      });
     }),
     sellBuilding: vi.fn(
       async (
@@ -786,6 +822,61 @@ describe('RealtimeService', () => {
     const unmortgaged = await service.unmortgageProperty(session, 1);
     expect(unmortgaged.state.properties.find((property) => property.property_id === 1)?.is_mortgaged).toBe(false);
     expect(players[0].money).toBe(roomA.starting_money - 30000);
+  });
+
+  it('sells an owned property back to the bank', async () => {
+    const { players, roomProperties, service, stateStore } = createHarness();
+    const session = {
+      socketId: 'socket-a',
+      roomId: roomA.id,
+      playerId: 'aaaaaaaa-1111-4111-8111-111111111111',
+      playerName: 'Host A',
+    };
+
+    await service.startGame(session);
+    roomProperties.find((property) => property.property_id === 1)!.owner_id = session.playerId;
+    await stateStore.setGameplayState(roomA.id, {
+      current_player_id: session.playerId,
+      phase: 'free_action',
+      double_count: 0,
+      dice: null,
+      pending_action: null,
+      jailed_player_ids: [],
+      winner_id: null,
+    });
+
+    const result = await service.sellProperty(session, 1);
+
+    expect(result.propertySold).toEqual({
+      amount: 300000,
+      player_id: session.playerId,
+      property_id: 1,
+    });
+    expect(result.state.properties.find((property) => property.property_id === 1)?.owner_id).toBeNull();
+    expect(players[0].money).toBe(roomA.starting_money + 300000);
+  });
+
+  it('resets a finished room for play again', async () => {
+    const { players, roomProperties, service, stateStore } = createHarness();
+    const session = {
+      socketId: 'socket-a',
+      roomId: roomA.id,
+      playerId: 'aaaaaaaa-1111-4111-8111-111111111111',
+      playerName: 'Host A',
+    };
+
+    await service.startGame(session);
+    roomProperties.find((property) => property.property_id === 1)!.owner_id = session.playerId;
+    players[1].is_bankrupt = true;
+    await service.endGameByHost(session);
+
+    const result = await service.playAgain(session);
+    const gameplay = await stateStore.getGameplayState(roomA.id);
+
+    expect(result.state.status).toBe('waiting');
+    expect(result.state.players.every((player) => !player.is_bankrupt && !player.is_ready)).toBe(true);
+    expect(result.state.properties.every((property) => property.owner_id === null)).toBe(true);
+    expect(gameplay?.phase).toBe('waiting');
   });
 
   it('declares bankruptcy, transfers assets, and finishes when one player remains', async () => {

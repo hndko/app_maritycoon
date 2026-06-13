@@ -383,6 +383,24 @@ export class RoomsRepository {
     await this.database.query("UPDATE rooms SET status = 'finished' WHERE id = $1", [roomId]);
   }
 
+  async resetRoomForReplay(roomId: string): Promise<void> {
+    await this.database.transaction(async (client) => {
+      await client.query("UPDATE rooms SET status = 'waiting' WHERE id = $1", [roomId]);
+      await client.query(
+        `
+          UPDATE room_players
+          SET money = 0,
+              position = 0,
+              is_bankrupt = FALSE,
+              is_ready = FALSE,
+              turn_order = NULL
+          WHERE room_id = $1
+        `,
+        [roomId],
+      );
+    });
+  }
+
   async startGame(roomId: string, startingMoney: number): Promise<StartedGameRecord> {
     return this.database.transaction(async (client) => {
       const playerResult = await client.query<RoomPlayerRecord>(

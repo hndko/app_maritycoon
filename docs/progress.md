@@ -2,6 +2,16 @@
 
 ## Completed
 
+- Final PRD compliance completion:
+  - Added Play Again flow for finished rooms through host-triggered Socket.IO `play_again`, resetting players, room properties, ready state, and gameplay state back to waiting.
+  - Added winner dialog with leaderboard summary and host Play Again action.
+  - Added property sell flow with backend validation, bank refund, `property_sold` log/event, and frontend action.
+  - Added frontend Unmortgage action to complete the existing backend unmortgage flow.
+  - Added public lobby filter UI for room status, max players, and full/not-full rooms.
+  - Added emoji chat controls, lightweight sound effects, and mute toggle.
+  - Added MVP UI components for property detail modal, purchase modal, toast, tooltip, dropdown, tabs, and dedicated dice display.
+  - Added Socket.IO PRD event alignment for `player_joined`, `player_left`, and `property_sold`.
+  - Updated README feature list for the completed MVP requirements.
 - Documentation refresh:
   - Added Indonesian portfolio-style `README.md` with technology badges, product overview, architecture summary, setup commands, quality gates, documentation links, and living-document maintenance notes.
   - Added `AGENTS.md` with project-specific AI/contributor workflow, source-of-truth priority, implementation rules, git workflow, testing notes, security/reliability requirements, and out-of-scope areas.

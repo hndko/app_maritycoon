@@ -11,6 +11,12 @@ export type PublicRoom = {
   status: RoomStatus;
 };
 
+export type PublicRoomFilter = {
+  status?: RoomStatus;
+  max_players?: number;
+  full?: boolean;
+};
+
 export type RoomPlayer = {
   id: string;
   room_id: string;

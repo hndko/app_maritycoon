@@ -3,10 +3,12 @@ import { boardSize, getBoardTrack } from '@/shared/lib/board';
 import { BoardTile } from './BoardTile';
 
 export function GameBoard({
+  onTileSelect,
   players,
   properties,
   roomProperties = [],
 }: {
+  onTileSelect?: (tile: PropertyTile) => void;
   players: RoomPlayer[];
   properties: PropertyTile[];
   roomProperties?: RealtimeRoomProperty[];
@@ -36,6 +38,7 @@ export function GameBoard({
               }}
             >
               <BoardTile
+                onSelect={onTileSelect}
                 players={players.filter((player) => player.position === tile.id)}
                 roomProperty={roomPropertyMap.get(tile.id)}
                 tile={tile}

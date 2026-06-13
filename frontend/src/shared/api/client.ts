@@ -5,6 +5,7 @@ import {
   JoinRoomInput,
   JoinRoomResponse,
   PropertyTile,
+  PublicRoomFilter,
   PublicRoom,
   RoomDetail,
 } from './types';
@@ -52,7 +53,14 @@ export const apiClient = {
     });
   },
 
-  listPublicRooms(): Promise<PublicRoom[]> {
-    return request<PublicRoom[]>('/rooms/public');
+  listPublicRooms(filter: PublicRoomFilter = {}): Promise<PublicRoom[]> {
+    const params = new URLSearchParams();
+
+    if (filter.status) params.set('status', filter.status);
+    if (filter.max_players) params.set('max_players', String(filter.max_players));
+    if (filter.full !== undefined) params.set('full', String(filter.full));
+
+    const query = params.toString();
+    return request<PublicRoom[]>(`/rooms/public${query ? `?${query}` : ''}`);
   },
 };

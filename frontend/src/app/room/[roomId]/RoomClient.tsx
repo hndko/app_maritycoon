@@ -1,18 +1,25 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { Copy, DoorOpen } from 'lucide-react';
+import { Copy, DoorOpen, Volume2, VolumeX } from 'lucide-react';
 import { Socket } from 'socket.io-client';
 import { ActionPanel } from '@/components/game/ActionPanel';
 import { ChatBox } from '@/components/game/ChatBox';
+import { Dice } from '@/components/game/Dice';
 import { GameBoard } from '@/components/game/GameBoard';
 import { GameLog } from '@/components/game/GameLog';
 import { PlayerList } from '@/components/game/PlayerList';
+import { PropertyModal } from '@/components/game/PropertyModal';
+import { PurchaseModal } from '@/components/game/PurchaseModal';
+import { WinnerDialog } from '@/components/game/WinnerDialog';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { Tabs } from '@/components/ui/Tabs';
+import { ToastMessage, ToastStack } from '@/components/ui/Toast';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { apiClient } from '@/shared/api/client';
 import {
   ChatMessage,
@@ -73,6 +80,10 @@ export function RoomClient({ inviteCode, roomId }: { inviteCode?: string; roomId
   const [isLoading, setLoading] = useState(true);
   const [isJoining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
+  const [activeSideTab, setActiveSideTab] = useState('players');
+  const [isMuted, setMuted] = useState(false);
+  const [selectedPropertyId, setSelectedPropertyId] = useState<number | null>(null);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [roomSettings, setRoomSettings] = useState({
     max_players: 4,
     room_name: '',
@@ -106,10 +117,60 @@ export function RoomClient({ inviteCode, roomId }: { inviteCode?: string; roomId
     typeof window === 'undefined' || !activeRoom
       ? ''
       : `${window.location.origin}/room/${activeRoom.room_code}${inviteCode ? `?invite=${inviteCode}` : ''}`;
+  const selectedProperty = selectedPropertyId === null
+    ? null
+    : properties.find((property) => property.id === selectedPropertyId) ?? null;
+  const selectedRoomProperty = selectedPropertyId === null
+    ? undefined
+    : state?.properties.find((property) => property.property_id === selectedPropertyId);
+  const pendingAction = state?.pending_action ?? null;
+  const pendingBuyProperty = pendingAction?.type === 'buy_property'
+    ? properties.find((property) => property.id === pendingAction.property_id) ?? null
+    : null;
 
   const playerSummary = useMemo(() => {
     return players.map((player) => player.player_name).join(', ');
   }, [players]);
+
+  function pushToast(message: string, tone: ToastMessage['tone'] = 'info') {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    setToasts((current) => [...current.slice(-2), { id, message, tone }]);
+    window.setTimeout(() => {
+      setToasts((current) => current.filter((toast) => toast.id !== id));
+    }, 3200);
+  }
+
+  function playSound(type: 'dice' | 'buy' | 'rent' | 'join' | 'leave' | 'winner') {
+    if (isMuted || typeof window === 'undefined') {
+      return;
+    }
+
+    const AudioContextClass =
+      window.AudioContext ??
+      (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) {
+      return;
+    }
+
+    const context = new AudioContextClass();
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    const frequencies: Record<typeof type, number> = {
+      buy: 660,
+      dice: 440,
+      join: 520,
+      leave: 220,
+      rent: 330,
+      winner: 780,
+    };
+
+    oscillator.frequency.value = frequencies[type];
+    gain.gain.value = 0.04;
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start();
+    oscillator.stop(context.currentTime + 0.12);
+  }
 
   useEffect(() => {
     let isMounted = true;
@@ -177,6 +238,26 @@ export function RoomClient({ inviteCode, roomId }: { inviteCode?: string; roomId
     socket.on('chat_broadcast', (payload: ChatMessage) => {
       appendChat(payload);
     });
+    socket.on('player_joined', (payload: { player_name: string; room_id: string }) => {
+      playSound('join');
+      appendChat({
+        message: `${payload.player_name} bergabung`,
+        room_id: payload.room_id,
+        sender_name: 'System',
+        timestamp: new Date().toISOString(),
+        type: 'system',
+      });
+    });
+    socket.on('player_left', (payload: { player_name: string; room_id: string }) => {
+      playSound('leave');
+      appendChat({
+        message: `${payload.player_name} disconnect`,
+        room_id: payload.room_id,
+        sender_name: 'System',
+        timestamp: new Date().toISOString(),
+        type: 'system',
+      });
+    });
     socket.on('game_started', (payload: GameStartedEvent) => {
       appendChat({
         message: `Game dimulai. Giliran pertama: ${payload.first_turn_player_id.slice(0, 8)}`,
@@ -187,6 +268,7 @@ export function RoomClient({ inviteCode, roomId }: { inviteCode?: string; roomId
       });
     });
     socket.on('dice_rolled_result', (payload: { player_id: string; dice_1: number; dice_2: number; total: number; is_double: boolean }) => {
+      playSound('dice');
       appendChat({
         message: `Dadu: ${payload.dice_1} + ${payload.dice_2} = ${payload.total}${payload.is_double ? ' (double)' : ''}`,
         room_id: roomId,
@@ -195,7 +277,20 @@ export function RoomClient({ inviteCode, roomId }: { inviteCode?: string; roomId
         type: 'system',
       });
     });
+    socket.on('property_sold', (payload: { amount: number; property_id: number }) => {
+      appendChat({
+        message: `Properti ${payload.property_id} dijual ${payload.amount.toLocaleString('id-ID')}`,
+        room_id: roomId,
+        sender_name: 'System',
+        timestamp: new Date().toISOString(),
+        type: 'system',
+      });
+    });
+    socket.on('property_updated', () => {
+      playSound('buy');
+    });
     socket.on('rent_paid', (payload: { amount: number }) => {
+      playSound('rent');
       appendChat({
         message: `Rent dibayar ${payload.amount.toLocaleString('id-ID')}`,
         room_id: roomId,
@@ -214,6 +309,7 @@ export function RoomClient({ inviteCode, roomId }: { inviteCode?: string; roomId
       });
     });
     socket.on('game_finished', (payload: { winner_id: string }) => {
+      playSound('winner');
       appendChat({
         message: `Game selesai. Winner: ${payload.winner_id.slice(0, 8)}`,
         room_id: roomId,
@@ -224,6 +320,7 @@ export function RoomClient({ inviteCode, roomId }: { inviteCode?: string; roomId
     });
     socket.on('error', (payload: { message?: string }) => {
       setError(payload.message ?? 'Socket error');
+      pushToast(payload.message ?? 'Socket error', 'error');
     });
 
     return () => {
@@ -231,7 +328,7 @@ export function RoomClient({ inviteCode, roomId }: { inviteCode?: string; roomId
       socketRef.current = null;
       setConnected(false);
     };
-  }, [appendChat, canonicalRoomId, roomId, session, setConnected, setError, setState]);
+  }, [appendChat, canonicalRoomId, isMuted, roomId, session, setConnected, setError, setState]);
 
   async function handleJoinFromLink(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -285,6 +382,7 @@ export function RoomClient({ inviteCode, roomId }: { inviteCode?: string; roomId
   function copyInvite() {
     if (shareUrl) {
       void navigator.clipboard.writeText(shareUrl);
+      pushToast('Invite link disalin', 'success');
     }
   }
 
@@ -325,6 +423,10 @@ export function RoomClient({ inviteCode, roomId }: { inviteCode?: string; roomId
     socketRef.current?.emit('end_game', {});
   }
 
+  function playAgain() {
+    socketRef.current?.emit('play_again', {});
+  }
+
   function rollDice() {
     socketRef.current?.emit('roll_dice', {});
   }
@@ -341,8 +443,16 @@ export function RoomClient({ inviteCode, roomId }: { inviteCode?: string; roomId
     socketRef.current?.emit('mortgage_property', { property_id: propertyId });
   }
 
+  function unmortgageProperty(propertyId: number) {
+    socketRef.current?.emit('unmortgage_property', { property_id: propertyId });
+  }
+
   function sellBuilding(propertyId: number) {
     socketRef.current?.emit('sell_building', { property_id: propertyId });
+  }
+
+  function sellProperty(propertyId: number) {
+    socketRef.current?.emit('sell_property', { property_id: propertyId });
   }
 
   function payJailFine() {
@@ -379,6 +489,7 @@ export function RoomClient({ inviteCode, roomId }: { inviteCode?: string; roomId
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
+      <ToastStack onDismiss={(id) => setToasts((current) => current.filter((toast) => toast.id !== id))} toasts={toasts} />
       <section className="mb-5 grid gap-4 lg:grid-cols-[1fr_auto]">
         <div>
           <div className="flex flex-wrap items-center gap-2">
@@ -395,9 +506,20 @@ export function RoomClient({ inviteCode, roomId }: { inviteCode?: string; roomId
           {playerSummary ? <p className="mt-1 text-sm text-slate-500">{playerSummary}</p> : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button icon={<Copy className="size-4" />} onClick={copyInvite} variant="ghost">
-            Copy Link
-          </Button>
+          <Tooltip label="Salin link undangan room">
+            <Button icon={<Copy className="size-4" />} onClick={copyInvite} variant="ghost">
+              Copy Link
+            </Button>
+          </Tooltip>
+          <Tooltip label={isMuted ? 'Nyalakan sound effects' : 'Matikan sound effects'}>
+            <Button
+              icon={isMuted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
+              onClick={() => setMuted((current) => !current)}
+              variant="ghost"
+            >
+              {isMuted ? 'Muted' : 'Sound'}
+            </Button>
+          </Tooltip>
         </div>
       </section>
 
@@ -420,18 +542,14 @@ export function RoomClient({ inviteCode, roomId }: { inviteCode?: string; roomId
       {error ? <p className="mb-4 rounded-md bg-red-50 p-3 text-sm text-danger">{error}</p> : null}
 
       <div className="grid gap-5 xl:grid-cols-[1fr_320px]">
-        <GameBoard players={players} properties={properties} roomProperties={state?.properties ?? []} />
+        <GameBoard
+          onTileSelect={(tile) => setSelectedPropertyId(tile.id)}
+          players={players}
+          properties={properties}
+          roomProperties={state?.properties ?? []}
+        />
         <div className="space-y-5">
-          {state?.dice ? (
-            <Card className="p-4">
-              <h2 className="text-lg font-bold">Dice</h2>
-              <p className="mt-2 text-sm text-slate-600">
-                {state.dice.dice_1} + {state.dice.dice_2} ={' '}
-                <span className="font-bold text-slate-950">{state.dice.total}</span>
-              </p>
-              {state.dice.is_double ? <p className="text-xs font-semibold text-secondary">Double</p> : null}
-            </Card>
-          ) : null}
+          <Dice dice={state?.dice ?? null} />
           <ActionPanel
             isConnected={isConnected}
             onBuildHouse={buildHouse}
@@ -443,8 +561,10 @@ export function RoomClient({ inviteCode, roomId }: { inviteCode?: string; roomId
             onMortgageProperty={mortgageProperty}
             onRollDice={rollDice}
             onSellBuilding={sellBuilding}
+            onSellProperty={sellProperty}
             onStartGame={startGame}
             onToggleReady={toggleReady}
+            onUnmortgageProperty={unmortgageProperty}
             onUseJailCard={useJailCard}
             allPlayersReady={allPlayersReady}
             currentPlayerIsInJail={currentPlayer?.is_in_jail ?? false}
@@ -471,6 +591,21 @@ export function RoomClient({ inviteCode, roomId }: { inviteCode?: string; roomId
                 (propertyState) =>
                   propertyState.owner_id === session?.playerId &&
                   (propertyState.house_count > 0 || propertyState.hotel_count > 0),
+              )?.property_id ?? null
+            }
+            ownedSellablePropertyId={
+              state?.properties.find(
+                (propertyState) =>
+                  propertyState.owner_id === session?.playerId &&
+                  propertyState.house_count === 0 &&
+                  propertyState.hotel_count === 0,
+              )?.property_id ?? null
+            }
+            ownedUnmortgageablePropertyId={
+              state?.properties.find(
+                (propertyState) =>
+                  propertyState.owner_id === session?.playerId &&
+                  propertyState.is_mortgaged,
               )?.property_id ?? null
             }
             pendingAction={state?.pending_action ?? null}
@@ -570,24 +705,56 @@ export function RoomClient({ inviteCode, roomId }: { inviteCode?: string; roomId
               <p className="mt-2 text-sm text-slate-600">{state.last_card.description}</p>
             </Card>
           ) : null}
-          <PlayerList currentTurnPlayerId={currentTurnPlayerId} players={players} />
         </div>
       </div>
 
-      <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_360px]">
-        <ChatBox disabled={!session || !isConnected} messages={chatMessages} onSend={sendChat} />
-        <GameLog
-          messages={
-            state?.game_logs.map((log) => ({
-              message: formatGameLogMessage(log.event_type, log.payload),
-              room_id: activeRoom.room_id,
-              sender_name: 'System',
-              timestamp: log.created_at,
-              type: 'system',
-            })) ?? chatMessages
-          }
+      <div className="mt-5">
+        <Tabs
+          activeTab={activeSideTab}
+          onChange={setActiveSideTab}
+          tabs={[
+            {
+              content: <PlayerList currentTurnPlayerId={currentTurnPlayerId} players={players} />,
+              id: 'players',
+              label: 'Players',
+            },
+            {
+              content: <ChatBox disabled={!session || !isConnected} messages={chatMessages} onSend={sendChat} />,
+              id: 'chat',
+              label: 'Chat',
+            },
+            {
+              content: (
+                <GameLog
+                  messages={
+                    state?.game_logs.map((log) => ({
+                      message: formatGameLogMessage(log.event_type, log.payload),
+                      room_id: activeRoom.room_id,
+                      sender_name: 'System',
+                      timestamp: log.created_at,
+                      type: 'system',
+                    })) ?? chatMessages
+                  }
+                />
+              ),
+              id: 'logs',
+              label: 'Logs',
+            },
+          ]}
         />
       </div>
+      <PropertyModal
+        onClose={() => setSelectedPropertyId(null)}
+        players={players}
+        property={selectedProperty}
+        roomProperty={selectedRoomProperty}
+      />
+      <PurchaseModal
+        onBuy={buyProperty}
+        pendingAction={state?.pending_action ?? null}
+        property={pendingBuyProperty}
+      />
+      <WinnerDialog currentPlayer={currentPlayer} onPlayAgain={playAgain} state={state} />
     </div>
   );
 }

@@ -425,6 +425,37 @@ export class RealtimeService {
     };
   }
 
+  async playAgain(session: SocketSession): Promise<{ state: RoomStatePayload }> {
+    await this.assertSocketActionAllowed(session, 'play_again');
+    await this.assertHost(session, ['finished']);
+    const gameplay = await this.stateStore.getGameplayState(session.roomId);
+
+    await this.roomsRepository.resetRoomForReplay(session.roomId);
+    await this.gameRepository.resetRoomPropertiesForReplay(session.roomId);
+    if (gameplay) {
+      await this.stateStore.setGameplayState(session.roomId, {
+        ...gameplay,
+        current_player_id: null,
+        phase: 'waiting',
+        double_count: 0,
+        dice: null,
+        pending_action: null,
+        jailed_player_ids: [],
+        winner_id: null,
+        jail_turns_by_player_id: {},
+        jail_free_card_player_ids: [],
+        last_card: null,
+        turn_deadline_at: null,
+        turn_started_at: null,
+      });
+    }
+    await this.gameRepository.appendLog(session.roomId, 'play_again', {
+      host_id: session.playerId,
+    });
+
+    return { state: await this.getRoomState(session.roomId) };
+  }
+
   async rollDice(session: SocketSession): Promise<{
     diceRolled: DiceRolledPayload;
     moved: PlayerMovedPayload | null;
@@ -753,6 +784,47 @@ export class RealtimeService {
     await this.stateStore.setGameplayState(session.roomId, { ...gameplay, phase: 'free_action' });
 
     return { state: await this.getRoomState(session.roomId) };
+  }
+
+  async sellProperty(
+    session: SocketSession,
+    propertyId: number,
+  ): Promise<{ propertySold: { player_id: string; property_id: number; amount: number }; state: RoomStatePayload }> {
+    await this.assertSocketActionAllowed(session, 'sell_property');
+    const { gameplay } = await this.assertCurrentPlayer(session, [
+      'await_action',
+      'free_action',
+      'bankruptcy_resolution',
+    ]);
+    const roomProperty = await this.gameRepository.findRoomProperty(session.roomId, propertyId);
+
+    if (!roomProperty || roomProperty.owner_id !== session.playerId) {
+      throw new ForbiddenException('Player does not own this property');
+    }
+
+    if (roomProperty.house_count > 0 || roomProperty.hotel_count > 0) {
+      throw new ConflictException('Sell buildings before selling property');
+    }
+
+    if (!roomProperty.mortgage_value) {
+      throw new ConflictException('Property has no sell value');
+    }
+
+    const amount = roomProperty.is_mortgaged
+      ? Math.floor(roomProperty.mortgage_value / 2)
+      : roomProperty.mortgage_value;
+    await this.gameRepository.sellProperty(session.roomId, propertyId, session.playerId, amount);
+    const propertySold = {
+      player_id: session.playerId,
+      property_id: propertyId,
+      amount,
+    };
+    await this.gameRepository.appendLog(session.roomId, 'property_sold', propertySold);
+
+    return {
+      propertySold,
+      state: await this.resolveDebtAfterAssetAction(session.roomId, gameplay),
+    };
   }
 
   async payJailFine(session: SocketSession): Promise<{ state: RoomStatePayload }> {

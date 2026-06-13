@@ -13,16 +13,22 @@ const colorClasses: Record<string, string> = {
 };
 
 export function BoardTile({
+  onSelect,
   players,
   roomProperty,
   tile,
 }: {
+  onSelect?: (tile: PropertyTile) => void;
   players: RoomPlayer[];
   roomProperty?: RealtimeRoomProperty;
   tile: PropertyTile;
 }) {
   return (
-    <div className="relative flex min-h-16 flex-col overflow-hidden rounded-md border border-slate-300 bg-white text-[10px] shadow-sm">
+    <button
+      className="relative flex min-h-16 w-full flex-col overflow-hidden rounded-md border border-slate-300 bg-white text-left text-[10px] shadow-sm transition hover:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      onClick={() => onSelect?.(tile)}
+      type="button"
+    >
       <div className={`h-2 ${tile.color_group ? colorClasses[tile.color_group] ?? 'bg-slate-300' : 'bg-slate-200'}`} />
       <div className="flex flex-1 flex-col justify-between gap-1 p-1.5">
         <span className="line-clamp-2 font-bold leading-tight text-slate-800">{tile.name}</span>
@@ -50,6 +56,6 @@ export function BoardTile({
           ))}
         </div>
       ) : null}
-    </div>
+    </button>
   );
 }

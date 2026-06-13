@@ -74,6 +74,11 @@ export class RealtimeGateway implements OnGatewayDisconnect, OnGatewayInit {
 
       socket.data.session = session;
       await socket.join(this.roomName(payload.room_id));
+      socket.to(this.roomName(payload.room_id)).emit('player_joined', {
+        player_id: payload.player_id,
+        player_name: payload.user_nickname.trim(),
+        room_id: payload.room_id,
+      });
       socket.emit('room_state_update', state);
       socket.to(this.roomName(payload.room_id)).emit('room_state_update', state);
       this.scheduleTurnTimeout(payload.room_id, state);
@@ -136,6 +141,19 @@ export class RealtimeGateway implements OnGatewayDisconnect, OnGatewayInit {
       this.server.to(this.roomName(session.roomId)).emit('game_started', started);
       this.server.to(this.roomName(session.roomId)).emit('room_state_update', state);
       this.scheduleTurnTimeout(session.roomId, state);
+    } catch (error) {
+      this.emitError(socket, error);
+    }
+  }
+
+  @SubscribeMessage('play_again')
+  async playAgain(@ConnectedSocket() socket: Socket): Promise<void> {
+    try {
+      const session = this.getSession(socket);
+      const result = await this.realtimeService.playAgain(session);
+
+      this.server.to(this.roomName(session.roomId)).emit('room_state_update', result.state);
+      this.scheduleTurnTimeout(session.roomId, result.state);
     } catch (error) {
       this.emitError(socket, error);
     }
@@ -338,6 +356,25 @@ export class RealtimeGateway implements OnGatewayDisconnect, OnGatewayInit {
     }
   }
 
+  @SubscribeMessage('sell_property')
+  async sellProperty(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: unknown,
+  ): Promise<void> {
+    try {
+      const session = this.getSession(socket);
+      const payload = this.validatePayload(PropertyActionSocketDto, body);
+      const result = await this.realtimeService.sellProperty(session, payload.property_id);
+      const roomName = this.roomName(session.roomId);
+
+      this.server.to(roomName).emit('property_sold', result.propertySold);
+      this.server.to(roomName).emit('room_state_update', result.state);
+      this.scheduleTurnTimeout(session.roomId, result.state);
+    } catch (error) {
+      this.emitError(socket, error);
+    }
+  }
+
   @SubscribeMessage('declare_bankruptcy')
   async declareBankruptcy(@ConnectedSocket() socket: Socket): Promise<void> {
     try {
@@ -430,6 +467,11 @@ export class RealtimeGateway implements OnGatewayDisconnect, OnGatewayInit {
         this.server.to(roomName).emit('turn_changed', result.turnChanged);
       }
 
+      this.server.to(roomName).emit('player_left', {
+        player_id: result.session.playerId,
+        player_name: result.session.playerName,
+        room_id: result.session.roomId,
+      });
       this.server.to(roomName).emit('room_state_update', result.state);
       this.scheduleTurnTimeout(result.session.roomId, result.state);
     } catch (error) {
