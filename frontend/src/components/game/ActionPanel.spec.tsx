@@ -70,8 +70,12 @@ describe('ActionPanel', () => {
         onStartGame={onStartGame}
         onToggleReady={vi.fn()}
         onUseJailCard={vi.fn()}
+        allPlayersReady
+        currentPlayerIsInJail={false}
+        currentPlayerJailCards={0}
         ownedBuildablePropertyId={null}
         ownedMortgageablePropertyId={null}
+        ownedSellableBuildingPropertyId={null}
         pendingAction={null}
         playerCount={2}
         playerIsReady={false}
@@ -108,8 +112,12 @@ describe('ActionPanel', () => {
         onStartGame={vi.fn()}
         onToggleReady={vi.fn()}
         onUseJailCard={vi.fn()}
+        allPlayersReady
+        currentPlayerIsInJail={false}
+        currentPlayerJailCards={0}
         ownedBuildablePropertyId={1}
         ownedMortgageablePropertyId={3}
+        ownedSellableBuildingPropertyId={null}
         pendingAction={{
           player_id: 'player-a',
           price: 600000,
@@ -167,8 +175,12 @@ describe('ActionPanel', () => {
         onStartGame={vi.fn()}
         onToggleReady={vi.fn()}
         onUseJailCard={vi.fn()}
+        allPlayersReady
+        currentPlayerIsInJail={false}
+        currentPlayerJailCards={0}
         ownedBuildablePropertyId={null}
         ownedMortgageablePropertyId={null}
+        ownedSellableBuildingPropertyId={null}
         pendingAction={{
           amount: 2000000,
           creditor_id: 'player-b',

@@ -31,8 +31,12 @@ export function ActionPanel({
   onStartGame,
   onToggleReady,
   onUseJailCard,
+  allPlayersReady,
+  currentPlayerIsInJail,
+  currentPlayerJailCards,
   ownedBuildablePropertyId,
   ownedMortgageablePropertyId,
+  ownedSellableBuildingPropertyId,
   pendingAction,
   playerCount,
   playerIsReady,
@@ -54,8 +58,12 @@ export function ActionPanel({
   onStartGame: () => void;
   onToggleReady: (isReady: boolean) => void;
   onUseJailCard: () => void;
+  allPlayersReady: boolean;
+  currentPlayerIsInJail: boolean;
+  currentPlayerJailCards: number;
   ownedBuildablePropertyId: number | null;
   ownedMortgageablePropertyId: number | null;
+  ownedSellableBuildingPropertyId: number | null;
   pendingAction: PendingAction;
   playerCount: number;
   playerIsReady: boolean;
@@ -69,7 +77,7 @@ export function ActionPanel({
     deadline_at?: string | null;
   };
 }) {
-  const canStart = status === 'waiting' && session?.isHost && playerCount >= 2 && isConnected;
+  const canStart = status === 'waiting' && session?.isHost && playerCount >= 2 && allPlayersReady && isConnected;
   const isCurrentPlayer = Boolean(session?.playerId && turn?.current_player_id === session.playerId);
   const canRoll = status === 'playing' && isConnected && isCurrentPlayer && turn?.phase === 'await_roll';
   const canEndTurn = status === 'playing' && isConnected && isCurrentPlayer && turn?.phase === 'free_action';
@@ -90,7 +98,8 @@ export function ActionPanel({
     status === 'playing' &&
     isConnected &&
     isCurrentPlayer &&
-    turn?.phase === 'await_roll';
+    turn?.phase === 'await_roll' &&
+    currentPlayerIsInJail;
 
   return (
     <Card className="p-4">
@@ -129,7 +138,7 @@ export function ActionPanel({
         <Button disabled={!canUseJailActions} icon={<DoorClosed className="size-4" />} onClick={onPayJailFine} variant="ghost">
           Pay Jail Fine
         </Button>
-        <Button disabled={!canUseJailActions} icon={<ShieldCheck className="size-4" />} onClick={onUseJailCard} variant="ghost">
+        <Button disabled={!canUseJailActions || currentPlayerJailCards < 1} icon={<ShieldCheck className="size-4" />} onClick={onUseJailCard} variant="ghost">
           Jail Card
         </Button>
         <Button
@@ -172,11 +181,11 @@ export function ActionPanel({
           Mortgage
         </Button>
         <Button
-          disabled={!isCurrentPlayer || ownedBuildablePropertyId === null}
+          disabled={!isCurrentPlayer || ownedSellableBuildingPropertyId === null}
           icon={<BadgeX className="size-4" />}
           onClick={() => {
-            if (ownedBuildablePropertyId !== null) {
-              onSellBuilding(ownedBuildablePropertyId);
+            if (ownedSellableBuildingPropertyId !== null) {
+              onSellBuilding(ownedSellableBuildingPropertyId);
             }
           }}
           variant="ghost"

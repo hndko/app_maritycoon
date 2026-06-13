@@ -3,6 +3,13 @@
 ## Completed
 
 - MVP missing-item implementation:
+  - Tightened waiting-room UX so host Start Game is disabled until all non-host players are ready.
+  - Added editable host room settings form in the room UI for room name, max players, starting money, and turn timer.
+  - Added manual invite-code input to the join page for invite-only rooms.
+  - Tightened jail action UI so jail fine/card actions only activate for jailed current players, and jail card requires an owned jail-free card.
+  - Added Chance bonus THR card and START bonus handling for card movement that passes START.
+  - Improved bankruptcy UI targeting so Sell Build uses owned properties that actually have houses/hotels.
+  - Improved game history UI messages from persisted game log payloads.
   - Added waiting-room ready status through Socket.IO and enforced all non-host players ready before host start.
   - Added MVP host controls for kick player, transfer host, update waiting-room settings, and host end game.
   - Completed jail MVP rules with pay fine, use get-out-of-jail card, roll double attempts, and third-failed-roll fine handling.
@@ -129,23 +136,15 @@
 
 ## Remaining
 
-- Finalize invite-only room model.
-- Finalize turn timer field and timeout behavior.
-- Finalize ready status model for waiting room.
 - Finalize full auction behavior when players decline property purchase.
-- Finalize full Chance and Community Chest card deck and advanced effects.
-- Finalize jail choices for fine/card/double attempts instead of the current MVP automatic fine on next roll.
-- Decide whether auction, spectator, trade, and host end-game behavior are in MVP scope.
+- Decide whether spectator should enter MVP later; currently optional and excluded.
+- Keep trade out of MVP unless explicitly re-scoped.
 
 ## Blockers / Known Issues
 
 - Coverage gates are scoped to unit-testable frontend component/helper/session code and backend application/domain services. Full browser E2E coverage for Next route clients remains future hardening.
 - `npm audit` still reports dev-only vulnerabilities, while production audit (`npm audit --omit=dev`) is clean.
 - Local host PostgreSQL connection using `localhost:5432` may collide with Windows/Laragon networking; Docker Compose service-to-service verification works using the backend container and `postgres` hostname.
-- PRD requires invite-only rooms, but the current database/API docs do not define invite tokens or allowlists.
-- PRD includes turn timer input, but the current database/API docs do not define timer persistence or realtime timeout events.
-- Sitemap includes ready status, but the current database/API docs do not define ready state.
 - Design/components mention trade UI, while PRD lists trading as a future feature.
 - Reconnect currently uses room/player identity and Redis socket state; durable guest session token mechanics still need frontend/session hardening.
-- Phase 6 uses static MVP Chance/Community Chest effects because complete card deck data is not specified in the PRD/game-rules.
 - Phase 6 leaves unbought properties unowned if the player ends turn; auction is explicitly optional in game-rules but still mentioned in PRD flow.

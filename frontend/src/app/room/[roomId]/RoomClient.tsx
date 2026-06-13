@@ -25,12 +25,60 @@ import { createSocket } from '@/shared/socket/socket-client';
 import { getRoomSession, saveRoomSession } from '@/shared/session/session-store';
 import { useRoomStore } from '@/stores/room-store';
 
+function formatGameLogMessage(eventType: string, payload: Record<string, unknown>): string {
+  const amount = typeof payload.amount === 'number' ? ` ${formatCurrency(payload.amount)}` : '';
+  const propertyId = typeof payload.property_id === 'number' ? ` tile ${payload.property_id}` : '';
+  const title = typeof payload.title === 'string' ? `: ${payload.title}` : '';
+
+  switch (eventType) {
+    case 'game_started':
+      return 'Game dimulai';
+    case 'ready_changed':
+      return `Ready status berubah`;
+    case 'dice_rolled':
+      return `Dadu dilempar`;
+    case 'property_bought':
+      return `Properti dibeli${propertyId}${amount}`;
+    case 'rent_paid':
+      return `Rent dibayar${amount}`;
+    case 'tax_paid':
+      return `Pajak dibayar${amount}`;
+    case 'chance_card':
+    case 'community_chest_card':
+      return `Kartu diambil${title}`;
+    case 'jail_fine_paid':
+      return `Denda penjara dibayar${amount}`;
+    case 'jail_roll_failed':
+      return 'Gagal keluar penjara';
+    case 'jail_card_used':
+      return 'Kartu bebas penjara dipakai';
+    case 'building_sold':
+      return `Bangunan dijual${propertyId}${amount}`;
+    case 'player_bankrupt':
+      return 'Pemain bangkrut';
+    case 'game_finished':
+    case 'game_finished_by_host':
+      return 'Game selesai';
+    case 'turn_changed':
+    case 'turn_skipped':
+      return 'Giliran berpindah';
+    default:
+      return eventType.replaceAll('_', ' ');
+  }
+}
+
 export function RoomClient({ inviteCode, roomId }: { inviteCode?: string; roomId: string }) {
   const socketRef = useRef<Socket | null>(null);
   const [properties, setProperties] = useState<PropertyTile[]>([]);
   const [isLoading, setLoading] = useState(true);
   const [isJoining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
+  const [roomSettings, setRoomSettings] = useState({
+    max_players: 4,
+    room_name: '',
+    starting_money: 15000000,
+    turn_timer_seconds: 60,
+  });
   const {
     appendChat,
     chatMessages,
@@ -49,7 +97,11 @@ export function RoomClient({ inviteCode, roomId }: { inviteCode?: string; roomId
   const activeRoom = state ?? room;
   const canonicalRoomId = activeRoom?.room_id ?? room?.room_id ?? roomId;
   const players = state?.players ?? room?.players ?? [];
+  const currentPlayer = players.find((player) => player.id === session?.playerId) ?? null;
   const currentTurnPlayerId = state?.current_turn_player_id ?? null;
+  const allPlayersReady = players
+    .filter((player) => !player.is_host)
+    .every((player) => player.is_ready);
   const shareUrl =
     typeof window === 'undefined' || !activeRoom
       ? ''
@@ -78,6 +130,12 @@ export function RoomClient({ inviteCode, roomId }: { inviteCode?: string; roomId
 
         setRoom(roomDetail);
         setProperties(propertyTiles);
+        setRoomSettings({
+          max_players: roomDetail.max_players,
+          room_name: roomDetail.room_name,
+          starting_money: roomDetail.starting_money,
+          turn_timer_seconds: roomDetail.turn_timer_seconds,
+        });
         setSession(getRoomSession(roomDetail.room_id) ?? getRoomSession(roomDetail.room_code));
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : 'Gagal memuat room');
@@ -256,10 +314,10 @@ export function RoomClient({ inviteCode, roomId }: { inviteCode?: string; roomId
     }
 
     socketRef.current?.emit('update_room_settings', {
-      max_players: activeRoom.max_players,
-      room_name: activeRoom.room_name,
-      starting_money: activeRoom.starting_money,
-      turn_timer_seconds: activeRoom.turn_timer_seconds,
+      max_players: roomSettings.max_players,
+      room_name: roomSettings.room_name,
+      starting_money: roomSettings.starting_money,
+      turn_timer_seconds: roomSettings.turn_timer_seconds,
     });
   }
 
@@ -388,6 +446,9 @@ export function RoomClient({ inviteCode, roomId }: { inviteCode?: string; roomId
             onStartGame={startGame}
             onToggleReady={toggleReady}
             onUseJailCard={useJailCard}
+            allPlayersReady={allPlayersReady}
+            currentPlayerIsInJail={currentPlayer?.is_in_jail ?? false}
+            currentPlayerJailCards={currentPlayer?.get_out_of_jail_cards ?? 0}
             ownedBuildablePropertyId={
               state?.properties.find(
                 (propertyState) =>
@@ -405,6 +466,13 @@ export function RoomClient({ inviteCode, roomId }: { inviteCode?: string; roomId
                   propertyState.hotel_count === 0,
               )?.property_id ?? null
             }
+            ownedSellableBuildingPropertyId={
+              state?.properties.find(
+                (propertyState) =>
+                  propertyState.owner_id === session?.playerId &&
+                  (propertyState.house_count > 0 || propertyState.hotel_count > 0),
+              )?.property_id ?? null
+            }
             pendingAction={state?.pending_action ?? null}
             playerCount={players.length}
             playerIsReady={players.find((player) => player.id === session?.playerId)?.is_ready ?? false}
@@ -416,7 +484,59 @@ export function RoomClient({ inviteCode, roomId }: { inviteCode?: string; roomId
           {session?.isHost && activeRoom.status === 'waiting' ? (
             <Card className="p-4">
               <h2 className="text-lg font-bold">Host Controls</h2>
-              <div className="mt-3 space-y-2">
+              <div className="mt-3 grid gap-3">
+                <Input
+                  label="Room Name"
+                  maxLength={100}
+                  minLength={3}
+                  onChange={(event) =>
+                    setRoomSettings((current) => ({
+                      ...current,
+                      room_name: event.target.value,
+                    }))
+                  }
+                  value={roomSettings.room_name}
+                />
+                <div className="grid grid-cols-3 gap-2">
+                  <Input
+                    label="Max"
+                    max={8}
+                    min={Math.max(2, players.length)}
+                    onChange={(event) =>
+                      setRoomSettings((current) => ({
+                        ...current,
+                        max_players: Number(event.target.value),
+                      }))
+                    }
+                    type="number"
+                    value={roomSettings.max_players}
+                  />
+                  <Input
+                    label="Money"
+                    min={1}
+                    onChange={(event) =>
+                      setRoomSettings((current) => ({
+                        ...current,
+                        starting_money: Number(event.target.value),
+                      }))
+                    }
+                    type="number"
+                    value={roomSettings.starting_money}
+                  />
+                  <Input
+                    label="Timer"
+                    max={300}
+                    min={15}
+                    onChange={(event) =>
+                      setRoomSettings((current) => ({
+                        ...current,
+                        turn_timer_seconds: Number(event.target.value),
+                      }))
+                    }
+                    type="number"
+                    value={roomSettings.turn_timer_seconds}
+                  />
+                </div>
                 <Button onClick={updateRoomSettings} variant="ghost">
                   Save Settings
                 </Button>
@@ -436,6 +556,20 @@ export function RoomClient({ inviteCode, roomId }: { inviteCode?: string; roomId
               </div>
             </Card>
           ) : null}
+          {activeRoom.status === 'waiting' ? (
+            <Card className="p-4">
+              <h2 className="text-lg font-bold">Waiting Room</h2>
+              <p className="mt-2 text-sm text-slate-600">
+                {allPlayersReady ? 'Semua pemain siap.' : 'Menunggu semua pemain menekan Ready.'}
+              </p>
+            </Card>
+          ) : null}
+          {state?.last_card ? (
+            <Card className="p-4">
+              <h2 className="text-lg font-bold">{state.last_card.title}</h2>
+              <p className="mt-2 text-sm text-slate-600">{state.last_card.description}</p>
+            </Card>
+          ) : null}
           <PlayerList currentTurnPlayerId={currentTurnPlayerId} players={players} />
         </div>
       </div>
@@ -445,7 +579,7 @@ export function RoomClient({ inviteCode, roomId }: { inviteCode?: string; roomId
         <GameLog
           messages={
             state?.game_logs.map((log) => ({
-              message: `${log.event_type}`,
+              message: formatGameLogMessage(log.event_type, log.payload),
               room_id: activeRoom.room_id,
               sender_name: 'System',
               timestamp: log.created_at,

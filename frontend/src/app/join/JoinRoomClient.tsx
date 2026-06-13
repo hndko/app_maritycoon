@@ -24,9 +24,11 @@ export function JoinRoomClient() {
     const playerName = String(form.get('player_name') ?? '').trim();
     const roomCode = String(form.get('room_code') ?? '').trim().toUpperCase();
     const password = String(form.get('password') ?? '').trim();
+    const inviteCode = String(form.get('invite_code') ?? '').trim();
 
     try {
       const joined = await apiClient.joinRoom({
+        invite_code: inviteCode || undefined,
         password: password || undefined,
         player_name: playerName,
         room_code: roomCode,
@@ -69,6 +71,7 @@ export function JoinRoomClient() {
         <form className="grid gap-4" onSubmit={handleSubmit}>
           <Input label="Nama Pemain" maxLength={50} minLength={2} name="player_name" required />
           <Input label="Room Code" maxLength={10} minLength={4} name="room_code" required />
+          <Input label="Invite Code" maxLength={64} name="invite_code" />
           {needsPassword ? (
             <Input label="Password Room" maxLength={100} minLength={4} name="password" type="password" />
           ) : null}

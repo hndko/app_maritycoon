@@ -86,6 +86,13 @@ const chanceCards: readonly CardDefinition[] = [
     description: 'Langsung masuk penjara.',
     effect: { type: 'go_to_jail' },
   },
+  {
+    deck: 'chance',
+    card_id: 'chance_thr',
+    title: 'Bonus THR',
+    description: 'Dapat bonus THR Rp700.000.',
+    effect: { type: 'receive_money', amount: 700000 },
+  },
 ];
 
 const communityChestCards: readonly CardDefinition[] = [
@@ -1408,6 +1415,15 @@ export class RealtimeService {
     }
 
     if (card.effect.type === 'move_to') {
+      const player = await this.roomsRepository.findPlayerInRoom(roomId, playerId);
+      if (player && card.effect.position < player.position) {
+        await this.gameRepository.addPlayerMoney(playerId, startBonus);
+        await this.gameRepository.appendLog(roomId, 'start_bonus', {
+          player_id: playerId,
+          amount: startBonus,
+          reason: 'card_move',
+        });
+      }
       await this.gameRepository.updatePlayerPosition(playerId, card.effect.position);
       return { gameplay: nextGameplay, bankrupt: null, finished: null };
     }
@@ -1415,6 +1431,14 @@ export class RealtimeService {
     if (card.effect.type === 'move_steps') {
       const player = await this.roomsRepository.findPlayerInRoom(roomId, playerId);
       const nextPosition = (((player?.position ?? 0) + card.effect.steps) % boardSize + boardSize) % boardSize;
+      if (player && card.effect.steps > 0 && player.position + card.effect.steps >= boardSize) {
+        await this.gameRepository.addPlayerMoney(playerId, startBonus);
+        await this.gameRepository.appendLog(roomId, 'start_bonus', {
+          player_id: playerId,
+          amount: startBonus,
+          reason: 'card_move',
+        });
+      }
       await this.gameRepository.updatePlayerPosition(playerId, nextPosition);
       return { gameplay: nextGameplay, bankrupt: null, finished: null };
     }
