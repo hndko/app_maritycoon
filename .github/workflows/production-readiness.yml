@@ -1,0 +1,53 @@
+name: Production Readiness
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: npm run build
+
+      - name: Validate production compose
+        env:
+          POSTGRES_DB: maritycoon
+          POSTGRES_USER: maritycoon_app
+          POSTGRES_PASSWORD: strong-postgres-password
+          REDIS_PASSWORD: strong-redis-password
+          PUBLIC_APP_URL: https://maritycoon.example
+          PUBLIC_API_URL: https://maritycoon.example
+          PUBLIC_SOCKET_URL: https://maritycoon.example
+          SESSION_TOKEN_SECRET: 0123456789abcdef0123456789abcdef
+        run: docker compose -f docker-compose.prod.yml config --quiet
+
+      - name: Build backend image
+        run: docker build -f backend/Dockerfile -t maritycoon-backend:ci .
+
+      - name: Build frontend image
+        run: docker build -f frontend/Dockerfile -t maritycoon-frontend:ci .

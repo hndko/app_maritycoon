@@ -130,6 +130,7 @@ Production Compose tersedia di `docker-compose.prod.yml` dan memakai:
 - Redis password dan append-only persistence.
 - Backend/frontend container health checks.
 - JSON logging melalui `LOG_FORMAT=json`.
+- Prometheus scrape config dan alert rules dasar untuk backend metrics.
 
 Sebelum deploy production, siapkan certificate:
 
@@ -211,6 +212,7 @@ Fokus yang sudah dikerjakan:
 - Restart timer recovery.
 - Health checks untuk PostgreSQL dan Redis.
 - Production Docker Compose, Nginx reverse proxy, JSON logging, metrics endpoint, backup/restore helper, dan Docker health checks.
+- GitHub Actions quality gate untuk lint, typecheck, test, build, Compose validation, dan Docker image build.
 
 Area yang masih perlu keputusan/lanjutan:
 

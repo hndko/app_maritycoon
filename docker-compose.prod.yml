@@ -102,6 +102,22 @@ services:
       - maritycoon-internal
       - maritycoon-public
 
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./docker/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - maritycoon-internal
+
 networks:
   maritycoon-internal:
     internal: true
@@ -110,3 +126,4 @@ networks:
 volumes:
   postgres-data:
   redis-data:
+  prometheus-data:

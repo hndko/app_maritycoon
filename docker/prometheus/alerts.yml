@@ -1,0 +1,18 @@
+groups:
+  - name: maritycoon-production
+    rules:
+      - alert: MariTycoonBackendMetricsDown
+        expr: up{job="maritycoon-backend"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: MariTycoon backend metrics endpoint is down.
+
+      - alert: MariTycoonBackendHighMemory
+        expr: maritycoon_process_memory_rss_bytes > 800000000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: MariTycoon backend RSS memory is above 800 MB.

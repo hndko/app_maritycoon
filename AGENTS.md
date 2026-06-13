@@ -155,6 +155,8 @@ Wajib dijaga:
 - Production harus memakai HTTPS public origin, `TRUST_PROXY=true`, Redis password, database password non-default, dan `LOG_FORMAT=json`.
 - PostgreSQL/Redis tidak boleh diekspos langsung ke internet pada konfigurasi production.
 - Jalankan backup sebelum migration/deployment berisiko dan verifikasi restore secara berkala.
+- CI harus menjaga lint, typecheck, test, build, production Compose validation, dan Docker image build tetap hijau.
+- Monitoring production minimal harus scrape `/api/metrics` dan punya alert untuk backend down.
 
 ## Area yang Tidak Boleh Dikerjakan Tanpa Scope Baru
 

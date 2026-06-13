@@ -12,6 +12,8 @@
   - Updated `/api/health` to return HTTP 503 when PostgreSQL or Redis readiness is degraded.
   - Moved REST API rate limiting to Redis when available so rate limits work across multiple backend instances.
   - Added PostgreSQL backup, restore, and rollback helper scripts.
+  - Added GitHub Actions production readiness workflow for lint, typecheck, test, build, production Compose validation, and Docker image builds.
+  - Added Prometheus scrape and alert-rule configuration for backend metrics availability and high memory usage.
   - Updated `.gitignore`, environment examples, README, and AGENTS guidance for production artifacts and operations.
 - Final PRD compliance completion:
   - Added Play Again flow for finished rooms through host-triggered Socket.IO `play_again`, resetting players, room properties, ready state, and gameplay state back to waiting.
