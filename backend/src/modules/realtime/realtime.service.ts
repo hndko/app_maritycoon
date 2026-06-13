@@ -19,6 +19,7 @@ import {
   GameFinishedPayload,
   GameStartedPayload,
   GameplayState,
+  CardDrawPayload,
   PendingAction,
   PlayerBankruptPayload,
   PlayerMovedPayload,
@@ -38,6 +39,92 @@ const taxAmounts = new Map<number, number>([
   [4, 200000],
   [38, 1000000],
 ]);
+
+type CardDefinition = CardDrawPayload & {
+  effect:
+    | { type: 'receive_money'; amount: number }
+    | { type: 'pay_money'; amount: number }
+    | { type: 'move_to'; position: number }
+    | { type: 'move_steps'; steps: number }
+    | { type: 'go_to_jail' }
+    | { type: 'get_out_of_jail' };
+};
+
+const chanceCards: readonly CardDefinition[] = [
+  {
+    deck: 'chance',
+    card_id: 'chance_umkm',
+    title: 'Bantuan UMKM',
+    description: 'Dapat bantuan UMKM Rp500.000.',
+    effect: { type: 'receive_money', amount: 500000 },
+  },
+  {
+    deck: 'chance',
+    card_id: 'chance_vehicle_tax',
+    title: 'Pajak Kendaraan',
+    description: 'Bayar pajak kendaraan Rp300.000.',
+    effect: { type: 'pay_money', amount: 300000 },
+  },
+  {
+    deck: 'chance',
+    card_id: 'chance_jakarta',
+    title: 'Maju ke Jakarta',
+    description: 'Maju ke Jakarta.',
+    effect: { type: 'move_to', position: 37 },
+  },
+  {
+    deck: 'chance',
+    card_id: 'chance_back_three',
+    title: 'Mundur 3 Langkah',
+    description: 'Mundur 3 langkah.',
+    effect: { type: 'move_steps', steps: -3 },
+  },
+  {
+    deck: 'chance',
+    card_id: 'chance_go_jail',
+    title: 'Masuk Penjara',
+    description: 'Langsung masuk penjara.',
+    effect: { type: 'go_to_jail' },
+  },
+];
+
+const communityChestCards: readonly CardDefinition[] = [
+  {
+    deck: 'community_chest',
+    card_id: 'community_village',
+    title: 'Menang Lomba Desa',
+    description: 'Dapat hadiah Rp400.000.',
+    effect: { type: 'receive_money', amount: 400000 },
+  },
+  {
+    deck: 'community_chest',
+    card_id: 'community_scholarship',
+    title: 'Beasiswa',
+    description: 'Dapat beasiswa Rp600.000.',
+    effect: { type: 'receive_money', amount: 600000 },
+  },
+  {
+    deck: 'community_chest',
+    card_id: 'community_hospital',
+    title: 'Biaya Rumah Sakit',
+    description: 'Bayar biaya rumah sakit Rp350.000.',
+    effect: { type: 'pay_money', amount: 350000 },
+  },
+  {
+    deck: 'community_chest',
+    card_id: 'community_inheritance',
+    title: 'Warisan',
+    description: 'Dapat warisan Rp800.000.',
+    effect: { type: 'receive_money', amount: 800000 },
+  },
+  {
+    deck: 'community_chest',
+    card_id: 'community_jail_free',
+    title: 'Bebas Penjara',
+    description: 'Simpan kartu bebas penjara.',
+    effect: { type: 'get_out_of_jail' },
+  },
+];
 
 @Injectable()
 export class RealtimeService {
@@ -134,6 +221,137 @@ export class RealtimeService {
     return payload;
   }
 
+  async setReady(session: SocketSession, isReady: boolean): Promise<{ state: RoomStatePayload }> {
+    await this.assertSocketActionAllowed(session, 'set_ready');
+    const room = await this.roomsRepository.findById(session.roomId);
+
+    if (!room || room.status !== 'waiting') {
+      throw new ConflictException('Ready status can only change in waiting rooms');
+    }
+
+    await this.roomsRepository.setPlayerReady(session.roomId, session.playerId, isReady);
+    await this.gameRepository.appendLog(session.roomId, 'ready_changed', {
+      player_id: session.playerId,
+      is_ready: isReady,
+    });
+
+    return { state: await this.getRoomState(session.roomId) };
+  }
+
+  async kickPlayer(session: SocketSession, targetPlayerId: string): Promise<{ state: RoomStatePayload }> {
+    await this.assertSocketActionAllowed(session, 'kick_player');
+    await this.assertHost(session, ['waiting']);
+
+    if (targetPlayerId === session.playerId) {
+      throw new ConflictException('Host cannot kick self');
+    }
+
+    await this.roomsRepository.removePlayer(session.roomId, targetPlayerId);
+    await this.gameRepository.appendLog(session.roomId, 'player_kicked', {
+      player_id: targetPlayerId,
+      host_id: session.playerId,
+    });
+
+    return { state: await this.getRoomState(session.roomId) };
+  }
+
+  async transferHost(session: SocketSession, targetPlayerId: string): Promise<{ state: RoomStatePayload }> {
+    await this.assertSocketActionAllowed(session, 'transfer_host');
+    await this.assertHost(session, ['waiting']);
+
+    if (targetPlayerId === session.playerId) {
+      throw new ConflictException('Player is already host');
+    }
+
+    const target = await this.roomsRepository.findPlayerInRoom(session.roomId, targetPlayerId);
+
+    if (!target) {
+      throw new NotFoundException('Target player not found');
+    }
+
+    await this.roomsRepository.transferHost(session.roomId, session.playerId, targetPlayerId);
+    await this.gameRepository.appendLog(session.roomId, 'host_transferred', {
+      from_player_id: session.playerId,
+      to_player_id: targetPlayerId,
+    });
+
+    return { state: await this.getRoomState(session.roomId) };
+  }
+
+  async updateRoomSettings(
+    session: SocketSession,
+    input: {
+      room_name: string;
+      max_players: number;
+      starting_money: number;
+      turn_timer_seconds: number;
+    },
+  ): Promise<{ state: RoomStatePayload }> {
+    await this.assertSocketActionAllowed(session, 'update_room_settings');
+    await this.assertHost(session, ['waiting']);
+    const players = await this.roomsRepository.listPlayers(session.roomId);
+
+    if (input.max_players < players.length) {
+      throw new ConflictException('Max players cannot be below current player count');
+    }
+
+    await this.roomsRepository.updateRoomSettings({
+      roomId: session.roomId,
+      roomName: input.room_name.trim(),
+      maxPlayers: input.max_players,
+      startingMoney: input.starting_money,
+      turnTimerSeconds: input.turn_timer_seconds,
+    });
+    await this.gameRepository.appendLog(session.roomId, 'room_settings_updated', {
+      host_id: session.playerId,
+      ...input,
+    });
+
+    return { state: await this.getRoomState(session.roomId) };
+  }
+
+  async endGameByHost(session: SocketSession): Promise<{
+    finished: GameFinishedPayload;
+    state: RoomStatePayload;
+  }> {
+    await this.assertSocketActionAllowed(session, 'end_game');
+    await this.assertHost(session, ['waiting', 'playing']);
+    const players = await this.roomsRepository.listPlayers(session.roomId);
+    const leaderboard = await this.buildLeaderboard(session.roomId, players);
+    const winner = leaderboard[0];
+
+    if (!winner) {
+      throw new ConflictException('Cannot finish an empty room');
+    }
+
+    const finished: GameFinishedPayload = {
+      winner_id: winner.player_id,
+      leaderboard,
+    };
+    const gameplay = await this.stateStore.getGameplayState(session.roomId);
+
+    await this.roomsRepository.finishRoom(session.roomId);
+    if (gameplay) {
+      await this.stateStore.setGameplayState(session.roomId, {
+        ...gameplay,
+        phase: 'finished',
+        winner_id: winner.player_id,
+        pending_action: null,
+        turn_deadline_at: null,
+        turn_started_at: null,
+      });
+    }
+    await this.gameRepository.appendLog(session.roomId, 'game_finished_by_host', {
+      ...finished,
+      host_id: session.playerId,
+    });
+
+    return {
+      finished,
+      state: await this.getRoomState(session.roomId),
+    };
+  }
+
   async startGame(session: SocketSession): Promise<{
     started: GameStartedPayload;
     state: RoomStatePayload;
@@ -160,6 +378,10 @@ export class RealtimeService {
       throw new ConflictException('At least two players are required to start');
     }
 
+    if (players.some((player) => !player.is_host && !player.is_ready)) {
+      throw new ConflictException('All non-host players must be ready');
+    }
+
     const started = await this.roomsRepository.startGame(
       session.roomId,
       room.starting_money,
@@ -173,6 +395,11 @@ export class RealtimeService {
       pending_action: null,
       jailed_player_ids: [],
       winner_id: null,
+      jail_turns_by_player_id: {},
+      jail_free_card_player_ids: [],
+      chance_deck: chanceCards.map((card) => card.card_id),
+      community_chest_deck: communityChestCards.map((card) => card.card_id),
+      last_card: null,
       ...this.createTurnDeadline(room.turn_timer_seconds),
     });
     const payload: GameStartedPayload = {
@@ -200,11 +427,49 @@ export class RealtimeService {
     const { gameplay, player } = await this.assertCurrentPlayer(session, ['await_roll']);
     let nextGameplay = gameplay;
 
-    if (gameplay.jailed_player_ids.includes(session.playerId)) {
+    const dice = this.rollTwoDice();
+    const diceRolled: DiceRolledPayload = {
+      player_id: session.playerId,
+      dice_1: dice.dice_1,
+      dice_2: dice.dice_2,
+      total: dice.total,
+      is_double: dice.is_double,
+    };
+    const isJailed = gameplay.jailed_player_ids.includes(session.playerId);
+
+    if (isJailed && !dice.is_double) {
+      const attempts = (gameplay.jail_turns_by_player_id?.[session.playerId] ?? 0) + 1;
+
+      if (attempts < 3) {
+        await this.stateStore.setGameplayState(session.roomId, {
+          ...gameplay,
+          dice,
+          phase: 'free_action',
+          pending_action: null,
+          jail_turns_by_player_id: {
+            ...(gameplay.jail_turns_by_player_id ?? {}),
+            [session.playerId]: attempts,
+          },
+        });
+        await this.gameRepository.appendLog(session.roomId, 'jail_roll_failed', {
+          player_id: session.playerId,
+          attempts,
+        });
+
+        return {
+          diceRolled,
+          moved: null,
+          rentPaid: null,
+          bankrupt: null,
+          finished: null,
+          state: await this.getRoomState(session.roomId),
+        };
+      }
+
       if (player.money < jailFine) {
         const bankruptcy = await this.bankruptPlayer(session.roomId, session.playerId, null);
         return {
-          diceRolled: this.emptyDice(session.playerId),
+          diceRolled,
           moved: null,
           rentPaid: null,
           bankrupt: bankruptcy.bankrupt,
@@ -214,25 +479,22 @@ export class RealtimeService {
       }
 
       await this.gameRepository.addPlayerMoney(session.playerId, -jailFine);
-      nextGameplay = {
-        ...gameplay,
-        jailed_player_ids: gameplay.jailed_player_ids.filter((id) => id !== session.playerId),
-      };
       await this.gameRepository.appendLog(session.roomId, 'jail_fine_paid', {
         player_id: session.playerId,
         amount: jailFine,
+        reason: 'third_failed_double',
+      });
+      nextGameplay = this.releaseFromJail(gameplay, session.playerId);
+    }
+
+    if (isJailed && dice.is_double) {
+      nextGameplay = this.releaseFromJail(gameplay, session.playerId);
+      await this.gameRepository.appendLog(session.roomId, 'jail_released_by_double', {
+        player_id: session.playerId,
       });
     }
 
-    const dice = this.rollTwoDice();
-    const diceRolled: DiceRolledPayload = {
-      player_id: session.playerId,
-      dice_1: dice.dice_1,
-      dice_2: dice.dice_2,
-      total: dice.total,
-      is_double: dice.is_double,
-    };
-    const nextDoubleCount = dice.is_double ? nextGameplay.double_count + 1 : 0;
+    const nextDoubleCount = dice.is_double && !isJailed ? nextGameplay.double_count + 1 : 0;
     await this.gameRepository.appendLog(session.roomId, 'dice_rolled', diceRolled);
 
     if (nextDoubleCount >= 3) {
@@ -483,6 +745,93 @@ export class RealtimeService {
     return { state: await this.getRoomState(session.roomId) };
   }
 
+  async payJailFine(session: SocketSession): Promise<{ state: RoomStatePayload }> {
+    await this.assertSocketActionAllowed(session, 'pay_jail_fine');
+    const { gameplay, player } = await this.assertCurrentPlayer(session, ['await_roll']);
+
+    if (!gameplay.jailed_player_ids.includes(session.playerId)) {
+      throw new ConflictException('Player is not in jail');
+    }
+
+    if (player.money < jailFine) {
+      throw new ConflictException('Not enough money to pay jail fine');
+    }
+
+    await this.gameRepository.addPlayerMoney(session.playerId, -jailFine);
+    await this.stateStore.setGameplayState(session.roomId, this.releaseFromJail(gameplay, session.playerId));
+    await this.gameRepository.appendLog(session.roomId, 'jail_fine_paid', {
+      player_id: session.playerId,
+      amount: jailFine,
+      reason: 'player_choice',
+    });
+
+    return { state: await this.getRoomState(session.roomId) };
+  }
+
+  async useJailCard(session: SocketSession): Promise<{ state: RoomStatePayload }> {
+    await this.assertSocketActionAllowed(session, 'use_jail_card');
+    const { gameplay } = await this.assertCurrentPlayer(session, ['await_roll']);
+
+    if (!gameplay.jailed_player_ids.includes(session.playerId)) {
+      throw new ConflictException('Player is not in jail');
+    }
+
+    if (!gameplay.jail_free_card_player_ids?.includes(session.playerId)) {
+      throw new ConflictException('Player has no get out of jail card');
+    }
+
+    await this.stateStore.setGameplayState(session.roomId, {
+      ...this.releaseFromJail(gameplay, session.playerId),
+      jail_free_card_player_ids: this.removeOne(
+        gameplay.jail_free_card_player_ids ?? [],
+        session.playerId,
+      ),
+    });
+    await this.gameRepository.appendLog(session.roomId, 'jail_card_used', {
+      player_id: session.playerId,
+    });
+
+    return { state: await this.getRoomState(session.roomId) };
+  }
+
+  async sellBuilding(session: SocketSession, propertyId: number): Promise<{ state: RoomStatePayload }> {
+    await this.assertSocketActionAllowed(session, 'sell_building');
+    const { gameplay } = await this.assertCurrentPlayer(session, [
+      'free_action',
+      'bankruptcy_resolution',
+    ]);
+    const roomProperty = await this.gameRepository.findRoomProperty(session.roomId, propertyId);
+
+    if (!roomProperty || roomProperty.owner_id !== session.playerId) {
+      throw new ForbiddenException('Player does not own this property');
+    }
+
+    if (!roomProperty.house_price || (roomProperty.house_count === 0 && roomProperty.hotel_count === 0)) {
+      throw new ConflictException('Property has no building to sell');
+    }
+
+    const refund = Math.floor(roomProperty.house_price / 2);
+    const nextHotelCount = roomProperty.hotel_count > 0 ? 0 : roomProperty.hotel_count;
+    const nextHouseCount =
+      roomProperty.hotel_count > 0 ? 4 : Math.max(0, roomProperty.house_count - 1);
+
+    await this.gameRepository.sellBuilding(
+      session.roomId,
+      propertyId,
+      session.playerId,
+      refund,
+      nextHouseCount,
+      nextHotelCount,
+    );
+    await this.gameRepository.appendLog(session.roomId, 'building_sold', {
+      player_id: session.playerId,
+      property_id: propertyId,
+      refund,
+    });
+
+    return { state: await this.resolveDebtAfterAssetAction(session.roomId, gameplay) };
+  }
+
   async declareBankruptcy(session: SocketSession): Promise<{
     bankrupt: PlayerBankruptPayload;
     finished: GameFinishedPayload | null;
@@ -498,6 +847,10 @@ export class RealtimeService {
       pending.player_id !== session.playerId
     ) {
       throw new ConflictException('No bankruptcy resolution is pending');
+    }
+
+    if (await this.canStillCoverDebt(session.roomId, session.playerId, pending.amount)) {
+      throw new ConflictException('Player still has assets to resolve the debt');
     }
 
     const result = await this.bankruptPlayer(session.roomId, session.playerId, pending.creditor_id);
@@ -579,6 +932,7 @@ export class RealtimeService {
       null;
     const gameplay = await this.stateStore.getGameplayState(roomId);
     const roomProperties = await this.gameRepository.listRoomProperties(roomId);
+    const gameLogs = await this.gameRepository.listLogs(roomId);
 
     return {
       room_id: room.id,
@@ -593,6 +947,8 @@ export class RealtimeService {
       players: realtimePlayers.map((player) => ({
         ...player,
         is_in_jail: gameplay?.jailed_player_ids.includes(player.id) ?? false,
+        jail_turns: gameplay?.jail_turns_by_player_id?.[player.id] ?? 0,
+        get_out_of_jail_cards: gameplay?.jail_free_card_player_ids?.filter((id) => id === player.id).length ?? 0,
       })),
       current_turn_player_id: currentTurnPlayer,
       properties: roomProperties,
@@ -605,6 +961,12 @@ export class RealtimeService {
       dice: gameplay?.dice ?? null,
       pending_action: gameplay?.pending_action ?? null,
       winner_id: gameplay?.winner_id ?? null,
+      last_card: gameplay?.last_card ?? null,
+      game_logs: gameLogs.map((log) => ({
+        event_type: log.event_type,
+        payload: log.payload,
+        created_at: log.created_at.toISOString(),
+      })),
     };
   }
 
@@ -759,14 +1121,19 @@ export class RealtimeService {
     }
 
     if (property.type === 'chance' || property.type === 'community_chest') {
-      const amount = property.type === 'chance' ? 500000 : 300000;
-      await this.gameRepository.addPlayerMoney(playerId, amount);
-      await this.gameRepository.appendLog(roomId, `${property.type}_card`, {
-        player_id: playerId,
-        effect: 'receive_money',
-        amount,
-      });
-      return { gameplay: nextGameplay, rentPaid: null, bankrupt: null, finished: null };
+      const cardResult = await this.drawAndApplyCard(
+        roomId,
+        playerId,
+        property.type,
+        nextGameplay,
+      );
+
+      return {
+        gameplay: cardResult.gameplay,
+        rentPaid: null,
+        bankrupt: cardResult.bankrupt,
+        finished: cardResult.finished,
+      };
     }
 
     if (!property.price) {
@@ -935,6 +1302,193 @@ export class RealtimeService {
     });
 
     return { bankrupt, finished: null };
+  }
+
+  private async assertHost(
+    session: SocketSession,
+    allowedStatuses: Array<'waiting' | 'playing' | 'finished'>,
+  ): Promise<void> {
+    const room = await this.roomsRepository.findById(session.roomId);
+
+    if (!room || !allowedStatuses.includes(room.status)) {
+      throw new ConflictException('Host action is not allowed in this room state');
+    }
+
+    const player = await this.roomsRepository.findPlayerInRoom(session.roomId, session.playerId);
+
+    if (!player?.is_host) {
+      throw new ForbiddenException('Only host can perform this action');
+    }
+  }
+
+  private releaseFromJail(gameplay: GameplayState, playerId: string): GameplayState {
+    const jailTurns = { ...(gameplay.jail_turns_by_player_id ?? {}) };
+    delete jailTurns[playerId];
+
+    return {
+      ...gameplay,
+      jailed_player_ids: gameplay.jailed_player_ids.filter((id) => id !== playerId),
+      jail_turns_by_player_id: jailTurns,
+      pending_action: null,
+    };
+  }
+
+  private removeOne(values: string[], value: string): string[] {
+    const index = values.indexOf(value);
+
+    if (index < 0) {
+      return values;
+    }
+
+    return [...values.slice(0, index), ...values.slice(index + 1)];
+  }
+
+  private async drawAndApplyCard(
+    roomId: string,
+    playerId: string,
+    deck: 'chance' | 'community_chest',
+    gameplay: GameplayState,
+  ): Promise<{
+    gameplay: GameplayState;
+    bankrupt: PlayerBankruptPayload | null;
+    finished: GameFinishedPayload | null;
+  }> {
+    const definitions = deck === 'chance' ? chanceCards : communityChestCards;
+    const deckKey = deck === 'chance' ? 'chance_deck' : 'community_chest_deck';
+    const currentDeck = gameplay[deckKey]?.length
+      ? gameplay[deckKey]!
+      : definitions.map((card) => card.card_id);
+    const [cardId, ...restDeck] = currentDeck;
+    const card = definitions.find((item) => item.card_id === cardId) ?? definitions[0];
+    const nextDeck = [...restDeck, card.card_id];
+    let nextGameplay: GameplayState = {
+      ...gameplay,
+      [deckKey]: nextDeck,
+      last_card: {
+        deck: card.deck,
+        card_id: card.card_id,
+        title: card.title,
+        description: card.description,
+      },
+    };
+
+    await this.gameRepository.appendLog(roomId, `${deck}_card`, {
+      player_id: playerId,
+      card_id: card.card_id,
+      title: card.title,
+      effect: card.effect.type,
+    });
+
+    if (card.effect.type === 'receive_money') {
+      await this.gameRepository.addPlayerMoney(playerId, card.effect.amount);
+      return { gameplay: nextGameplay, bankrupt: null, finished: null };
+    }
+
+    if (card.effect.type === 'pay_money') {
+      const player = await this.roomsRepository.findPlayerInRoom(roomId, playerId);
+
+      if (player && player.money < card.effect.amount) {
+        const pending: PendingAction = {
+          type: 'bankruptcy_resolution',
+          player_id: playerId,
+          creditor_id: null,
+          amount: card.effect.amount,
+          reason: 'card',
+        };
+
+        return {
+          gameplay: { ...nextGameplay, phase: 'bankruptcy_resolution', pending_action: pending },
+          bankrupt: null,
+          finished: null,
+        };
+      }
+
+      await this.gameRepository.addPlayerMoney(playerId, -card.effect.amount);
+      return { gameplay: nextGameplay, bankrupt: null, finished: null };
+    }
+
+    if (card.effect.type === 'move_to') {
+      await this.gameRepository.updatePlayerPosition(playerId, card.effect.position);
+      return { gameplay: nextGameplay, bankrupt: null, finished: null };
+    }
+
+    if (card.effect.type === 'move_steps') {
+      const player = await this.roomsRepository.findPlayerInRoom(roomId, playerId);
+      const nextPosition = (((player?.position ?? 0) + card.effect.steps) % boardSize + boardSize) % boardSize;
+      await this.gameRepository.updatePlayerPosition(playerId, nextPosition);
+      return { gameplay: nextGameplay, bankrupt: null, finished: null };
+    }
+
+    if (card.effect.type === 'go_to_jail') {
+      await this.gameRepository.updatePlayerPosition(playerId, jailPosition);
+      nextGameplay = {
+        ...nextGameplay,
+        double_count: 0,
+        jailed_player_ids: this.addUnique(nextGameplay.jailed_player_ids, playerId),
+      };
+      return { gameplay: nextGameplay, bankrupt: null, finished: null };
+    }
+
+    nextGameplay = {
+      ...nextGameplay,
+      jail_free_card_player_ids: [
+        ...(nextGameplay.jail_free_card_player_ids ?? []),
+        playerId,
+      ],
+    };
+
+    return { gameplay: nextGameplay, bankrupt: null, finished: null };
+  }
+
+  private async canStillCoverDebt(roomId: string, playerId: string, debtAmount: number): Promise<boolean> {
+    const player = await this.roomsRepository.findPlayerInRoom(roomId, playerId);
+    const properties = await this.gameRepository.listRoomProperties(roomId);
+    let liquidationValue = player?.money ?? 0;
+
+    for (const property of properties.filter((item) => item.owner_id === playerId)) {
+      const detail = await this.gameRepository.findRoomProperty(roomId, property.property_id);
+
+      if (!detail) {
+        continue;
+      }
+
+      if (!property.is_mortgaged && property.house_count === 0 && property.hotel_count === 0) {
+        liquidationValue += detail.mortgage_value ?? 0;
+      }
+
+      if (detail.house_price) {
+        liquidationValue += Math.floor(detail.house_price / 2) * property.house_count;
+        liquidationValue += Math.floor(detail.house_price / 2) * property.hotel_count;
+      }
+    }
+
+    return liquidationValue >= debtAmount;
+  }
+
+  private async buildLeaderboard(
+    roomId: string,
+    players: RoomPlayerRecord[],
+  ): Promise<GameFinishedPayload['leaderboard']> {
+    const roomProperties = await this.gameRepository.listRoomProperties(roomId);
+
+    return Promise.all(
+      players.map(async (player) => {
+        let assetValue = player.money;
+
+        for (const property of roomProperties.filter((item) => item.owner_id === player.id)) {
+          const detail = await this.gameRepository.findRoomProperty(roomId, property.property_id);
+          assetValue += detail?.mortgage_value ?? 0;
+          assetValue += (detail?.house_price ?? 0) * (property.house_count + property.hotel_count);
+        }
+
+        return {
+          player_id: player.id,
+          player_name: player.player_name,
+          money: assetValue,
+          is_bankrupt: player.is_bankrupt,
+        };
+      }),
+    ).then((leaderboard) => leaderboard.sort((left, right) => right.money - left.money));
   }
 
   private addUnique(values: string[], nextValue: string): string[] {

@@ -1,4 +1,16 @@
-import { AlertTriangle, Dice5, Home, Landmark, Play, ShoppingCart, Square } from 'lucide-react';
+import {
+  AlertTriangle,
+  BadgeCheck,
+  BadgeX,
+  Dice5,
+  DoorClosed,
+  Home,
+  Landmark,
+  Play,
+  ShieldCheck,
+  ShoppingCart,
+  Square,
+} from 'lucide-react';
 import { PendingAction, RealtimeRoomProperty, RoomStatus } from '@/shared/api/types';
 import { formatCurrency } from '@/shared/lib/format';
 import { RoomSession } from '@/shared/session/session-store';
@@ -11,13 +23,19 @@ export function ActionPanel({
   onBuyProperty,
   onDeclareBankruptcy,
   onEndTurn,
+  onEndGame,
+  onPayJailFine,
   onMortgageProperty,
   onRollDice,
+  onSellBuilding,
   onStartGame,
+  onToggleReady,
+  onUseJailCard,
   ownedBuildablePropertyId,
   ownedMortgageablePropertyId,
   pendingAction,
   playerCount,
+  playerIsReady,
   roomProperties,
   session,
   status,
@@ -28,13 +46,19 @@ export function ActionPanel({
   onBuyProperty: (propertyId: number) => void;
   onDeclareBankruptcy: () => void;
   onEndTurn: () => void;
+  onEndGame: () => void;
+  onPayJailFine: () => void;
   onMortgageProperty: (propertyId: number) => void;
   onRollDice: () => void;
+  onSellBuilding: (propertyId: number) => void;
   onStartGame: () => void;
+  onToggleReady: (isReady: boolean) => void;
+  onUseJailCard: () => void;
   ownedBuildablePropertyId: number | null;
   ownedMortgageablePropertyId: number | null;
   pendingAction: PendingAction;
   playerCount: number;
+  playerIsReady: boolean;
   roomProperties: RealtimeRoomProperty[];
   session: RoomSession | null;
   status: RoomStatus;
@@ -62,6 +86,11 @@ export function ActionPanel({
   const ownedPropertyCount = roomProperties.filter(
     (property) => property.owner_id === session?.playerId,
   ).length;
+  const canUseJailActions =
+    status === 'playing' &&
+    isConnected &&
+    isCurrentPlayer &&
+    turn?.phase === 'await_roll';
 
   return (
     <Card className="p-4">
@@ -86,8 +115,22 @@ export function ActionPanel({
         <Button disabled={!canStart} icon={<Play className="size-4" />} onClick={onStartGame} variant="success">
           Start Game
         </Button>
+        <Button
+          disabled={!isConnected || status !== 'waiting' || !session || session.isHost}
+          icon={playerIsReady ? <BadgeX className="size-4" /> : <BadgeCheck className="size-4" />}
+          onClick={() => onToggleReady(!playerIsReady)}
+          variant="ghost"
+        >
+          {playerIsReady ? 'Unready' : 'Ready'}
+        </Button>
         <Button disabled={!canRoll} icon={<Dice5 className="size-4" />} onClick={onRollDice} variant="secondary">
           Roll Dice
+        </Button>
+        <Button disabled={!canUseJailActions} icon={<DoorClosed className="size-4" />} onClick={onPayJailFine} variant="ghost">
+          Pay Jail Fine
+        </Button>
+        <Button disabled={!canUseJailActions} icon={<ShieldCheck className="size-4" />} onClick={onUseJailCard} variant="ghost">
+          Jail Card
         </Button>
         <Button
           disabled={!canBuy}
@@ -129,12 +172,27 @@ export function ActionPanel({
           Mortgage
         </Button>
         <Button
+          disabled={!isCurrentPlayer || ownedBuildablePropertyId === null}
+          icon={<BadgeX className="size-4" />}
+          onClick={() => {
+            if (ownedBuildablePropertyId !== null) {
+              onSellBuilding(ownedBuildablePropertyId);
+            }
+          }}
+          variant="ghost"
+        >
+          Sell Build
+        </Button>
+        <Button
           disabled={!canDeclareBankruptcy}
           icon={<AlertTriangle className="size-4" />}
           onClick={onDeclareBankruptcy}
           variant="danger"
         >
           Bankruptcy
+        </Button>
+        <Button disabled={!session?.isHost || status === 'finished'} icon={<AlertTriangle className="size-4" />} onClick={onEndGame} variant="danger">
+          End Game
         </Button>
       </div>
       {ownedPropertyCount > 0 ? (

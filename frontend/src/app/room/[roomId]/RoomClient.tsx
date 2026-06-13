@@ -238,6 +238,35 @@ export function RoomClient({ inviteCode, roomId }: { inviteCode?: string; roomId
     socketRef.current?.emit('start_game', {});
   }
 
+  function toggleReady(isReady: boolean) {
+    socketRef.current?.emit('set_ready', { is_ready: isReady });
+  }
+
+  function kickPlayer(playerId: string) {
+    socketRef.current?.emit('kick_player', { player_id: playerId });
+  }
+
+  function transferHost(playerId: string) {
+    socketRef.current?.emit('transfer_host', { player_id: playerId });
+  }
+
+  function updateRoomSettings() {
+    if (!activeRoom) {
+      return;
+    }
+
+    socketRef.current?.emit('update_room_settings', {
+      max_players: activeRoom.max_players,
+      room_name: activeRoom.room_name,
+      starting_money: activeRoom.starting_money,
+      turn_timer_seconds: activeRoom.turn_timer_seconds,
+    });
+  }
+
+  function endGame() {
+    socketRef.current?.emit('end_game', {});
+  }
+
   function rollDice() {
     socketRef.current?.emit('roll_dice', {});
   }
@@ -252,6 +281,18 @@ export function RoomClient({ inviteCode, roomId }: { inviteCode?: string; roomId
 
   function mortgageProperty(propertyId: number) {
     socketRef.current?.emit('mortgage_property', { property_id: propertyId });
+  }
+
+  function sellBuilding(propertyId: number) {
+    socketRef.current?.emit('sell_building', { property_id: propertyId });
+  }
+
+  function payJailFine() {
+    socketRef.current?.emit('pay_jail_fine', {});
+  }
+
+  function useJailCard() {
+    socketRef.current?.emit('use_jail_card', {});
   }
 
   function declareBankruptcy() {
@@ -339,9 +380,14 @@ export function RoomClient({ inviteCode, roomId }: { inviteCode?: string; roomId
             onBuyProperty={buyProperty}
             onDeclareBankruptcy={declareBankruptcy}
             onEndTurn={endTurn}
+            onEndGame={endGame}
+            onPayJailFine={payJailFine}
             onMortgageProperty={mortgageProperty}
             onRollDice={rollDice}
+            onSellBuilding={sellBuilding}
             onStartGame={startGame}
+            onToggleReady={toggleReady}
+            onUseJailCard={useJailCard}
             ownedBuildablePropertyId={
               state?.properties.find(
                 (propertyState) =>
@@ -361,18 +407,52 @@ export function RoomClient({ inviteCode, roomId }: { inviteCode?: string; roomId
             }
             pendingAction={state?.pending_action ?? null}
             playerCount={players.length}
+            playerIsReady={players.find((player) => player.id === session?.playerId)?.is_ready ?? false}
             roomProperties={state?.properties ?? []}
             session={session}
             status={activeRoom.status}
             turn={state?.turn}
           />
+          {session?.isHost && activeRoom.status === 'waiting' ? (
+            <Card className="p-4">
+              <h2 className="text-lg font-bold">Host Controls</h2>
+              <div className="mt-3 space-y-2">
+                <Button onClick={updateRoomSettings} variant="ghost">
+                  Save Settings
+                </Button>
+                {players
+                  .filter((player) => player.id !== session.playerId)
+                  .map((player) => (
+                    <div className="flex flex-wrap items-center gap-2 text-sm" key={player.id}>
+                      <span className="min-w-0 flex-1">{player.player_name}</span>
+                      <Button onClick={() => transferHost(player.id)} variant="ghost">
+                        Transfer Host
+                      </Button>
+                      <Button onClick={() => kickPlayer(player.id)} variant="danger">
+                        Kick
+                      </Button>
+                    </div>
+                  ))}
+              </div>
+            </Card>
+          ) : null}
           <PlayerList currentTurnPlayerId={currentTurnPlayerId} players={players} />
         </div>
       </div>
 
       <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_360px]">
         <ChatBox disabled={!session || !isConnected} messages={chatMessages} onSend={sendChat} />
-        <GameLog messages={chatMessages} />
+        <GameLog
+          messages={
+            state?.game_logs.map((log) => ({
+              message: `${log.event_type}`,
+              room_id: activeRoom.room_id,
+              sender_name: 'System',
+              timestamp: log.created_at,
+              type: 'system',
+            })) ?? chatMessages
+          }
+        />
       </div>
     </div>
   );

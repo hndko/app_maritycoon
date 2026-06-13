@@ -13,6 +13,8 @@ export type RealtimePlayer = RoomPlayerRecord & {
   is_connected: boolean;
   disconnected_at: string | null;
   is_in_jail?: boolean;
+  jail_turns?: number;
+  get_out_of_jail_cards?: number;
 };
 
 export type DiceState = {
@@ -39,6 +41,10 @@ export type PendingAction =
       price: number;
     }
   | {
+      type: 'jail_decision';
+      player_id: string;
+    }
+  | {
       type: 'bankruptcy_resolution';
       player_id: string;
       creditor_id: string | null;
@@ -55,8 +61,26 @@ export type GameplayState = {
   pending_action: PendingAction;
   jailed_player_ids: string[];
   winner_id: string | null;
+  jail_turns_by_player_id?: Record<string, number>;
+  jail_free_card_player_ids?: string[];
+  chance_deck?: string[];
+  community_chest_deck?: string[];
+  last_card?: CardDrawPayload | null;
   turn_started_at?: string | null;
   turn_deadline_at?: string | null;
+};
+
+export type CardDrawPayload = {
+  deck: 'chance' | 'community_chest';
+  card_id: string;
+  title: string;
+  description: string;
+};
+
+export type GameLogPayload = {
+  event_type: string;
+  payload: Record<string, unknown>;
+  created_at: string;
 };
 
 export type RealtimeRoomProperty = {
@@ -89,6 +113,8 @@ export type RoomStatePayload = {
   dice: DiceState;
   pending_action: PendingAction;
   winner_id: string | null;
+  last_card: CardDrawPayload | null;
+  game_logs: GameLogPayload[];
 };
 
 export type ChatBroadcastPayload = {

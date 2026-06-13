@@ -27,6 +27,12 @@ export type RoomPropertyRecord = {
 
 export type RoomPropertyWithTileRecord = RoomPropertyRecord & PropertyRecord;
 
+export type GameLogRecord = {
+  event_type: string;
+  payload: Record<string, unknown>;
+  created_at: Date;
+};
+
 @Injectable()
 export class GameRepository {
   constructor(private readonly database: DatabaseService) {}
@@ -68,6 +74,21 @@ export class GameRepository {
       `,
       [roomId, eventType, JSON.stringify(payload)],
     );
+  }
+
+  async listLogs(roomId: string, limit = 30): Promise<GameLogRecord[]> {
+    const result = await this.database.query<GameLogRecord>(
+      `
+        SELECT event_type, payload, created_at
+        FROM game_logs
+        WHERE room_id = $1
+        ORDER BY created_at DESC
+        LIMIT $2
+      `,
+      [roomId, limit],
+    );
+
+    return result.rows.reverse();
   }
 
   async initializeRoomProperties(roomId: string): Promise<void> {
@@ -317,6 +338,30 @@ export class GameRepository {
       `,
       [toPlayerId, roomId, fromPlayerId],
     );
+  }
+
+  async sellBuilding(
+    roomId: string,
+    propertyId: number,
+    playerId: string,
+    refund: number,
+    nextHouseCount: number,
+    nextHotelCount: number,
+  ): Promise<void> {
+    await this.database.transaction(async (client) => {
+      await client.query('UPDATE room_players SET money = money + $1 WHERE id = $2', [
+        refund,
+        playerId,
+      ]);
+      await client.query(
+        `
+          UPDATE room_properties
+          SET house_count = $1, hotel_count = $2
+          WHERE room_id = $3 AND property_id = $4 AND owner_id = $5
+        `,
+        [nextHouseCount, nextHotelCount, roomId, propertyId, playerId],
+      );
+    });
   }
 
   async finishRoom(roomId: string): Promise<void> {

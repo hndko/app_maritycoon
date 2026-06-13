@@ -17,7 +17,10 @@ import { validateSync } from 'class-validator';
 import { Server, Socket } from 'socket.io';
 import { ChatMessageSocketDto } from './dto/chat-message-socket.dto';
 import { JoinRoomSocketDto } from './dto/join-room-socket.dto';
+import { PlayerActionSocketDto } from './dto/player-action-socket.dto';
 import { PropertyActionSocketDto } from './dto/property-action-socket.dto';
+import { ReadyStatusSocketDto } from './dto/ready-status-socket.dto';
+import { RoomSettingsSocketDto } from './dto/room-settings-socket.dto';
 import { RealtimeService } from './realtime.service';
 import { socketRoomPrefix, SocketErrorPayload, SocketSession } from './realtime.types';
 
@@ -93,6 +96,85 @@ export class RealtimeGateway implements OnGatewayDisconnect {
       this.server.to(this.roomName(session.roomId)).emit('game_started', started);
       this.server.to(this.roomName(session.roomId)).emit('room_state_update', state);
       this.scheduleTurnTimeout(session.roomId, state);
+    } catch (error) {
+      this.emitError(socket, error);
+    }
+  }
+
+  @SubscribeMessage('set_ready')
+  async setReady(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: unknown,
+  ): Promise<void> {
+    try {
+      const session = this.getSession(socket);
+      const payload = this.validatePayload(ReadyStatusSocketDto, body);
+      const result = await this.realtimeService.setReady(session, payload.is_ready);
+
+      this.server.to(this.roomName(session.roomId)).emit('room_state_update', result.state);
+    } catch (error) {
+      this.emitError(socket, error);
+    }
+  }
+
+  @SubscribeMessage('kick_player')
+  async kickPlayer(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: unknown,
+  ): Promise<void> {
+    try {
+      const session = this.getSession(socket);
+      const payload = this.validatePayload(PlayerActionSocketDto, body);
+      const result = await this.realtimeService.kickPlayer(session, payload.player_id);
+
+      this.server.to(this.roomName(session.roomId)).emit('room_state_update', result.state);
+    } catch (error) {
+      this.emitError(socket, error);
+    }
+  }
+
+  @SubscribeMessage('transfer_host')
+  async transferHost(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: unknown,
+  ): Promise<void> {
+    try {
+      const session = this.getSession(socket);
+      const payload = this.validatePayload(PlayerActionSocketDto, body);
+      const result = await this.realtimeService.transferHost(session, payload.player_id);
+
+      this.server.to(this.roomName(session.roomId)).emit('room_state_update', result.state);
+    } catch (error) {
+      this.emitError(socket, error);
+    }
+  }
+
+  @SubscribeMessage('update_room_settings')
+  async updateRoomSettings(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: unknown,
+  ): Promise<void> {
+    try {
+      const session = this.getSession(socket);
+      const payload = this.validatePayload(RoomSettingsSocketDto, body);
+      const result = await this.realtimeService.updateRoomSettings(session, payload);
+
+      this.server.to(this.roomName(session.roomId)).emit('room_state_update', result.state);
+    } catch (error) {
+      this.emitError(socket, error);
+    }
+  }
+
+  @SubscribeMessage('end_game')
+  async endGame(@ConnectedSocket() socket: Socket): Promise<void> {
+    try {
+      const session = this.getSession(socket);
+      const result = await this.realtimeService.endGameByHost(session);
+      const roomName = this.roomName(session.roomId);
+
+      this.server.to(roomName).emit('game_finished', result.finished);
+      this.server.to(roomName).emit('room_state_update', result.state);
+      this.scheduleTurnTimeout(session.roomId, result.state);
     } catch (error) {
       this.emitError(socket, error);
     }
@@ -230,6 +312,49 @@ export class RealtimeGateway implements OnGatewayDisconnect {
       }
 
       this.server.to(roomName).emit('room_state_update', result.state);
+      this.scheduleTurnTimeout(session.roomId, result.state);
+    } catch (error) {
+      this.emitError(socket, error);
+    }
+  }
+
+  @SubscribeMessage('pay_jail_fine')
+  async payJailFine(@ConnectedSocket() socket: Socket): Promise<void> {
+    try {
+      const session = this.getSession(socket);
+      const result = await this.realtimeService.payJailFine(session);
+
+      this.server.to(this.roomName(session.roomId)).emit('room_state_update', result.state);
+      this.scheduleTurnTimeout(session.roomId, result.state);
+    } catch (error) {
+      this.emitError(socket, error);
+    }
+  }
+
+  @SubscribeMessage('use_jail_card')
+  async useJailCard(@ConnectedSocket() socket: Socket): Promise<void> {
+    try {
+      const session = this.getSession(socket);
+      const result = await this.realtimeService.useJailCard(session);
+
+      this.server.to(this.roomName(session.roomId)).emit('room_state_update', result.state);
+      this.scheduleTurnTimeout(session.roomId, result.state);
+    } catch (error) {
+      this.emitError(socket, error);
+    }
+  }
+
+  @SubscribeMessage('sell_building')
+  async sellBuilding(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: unknown,
+  ): Promise<void> {
+    try {
+      const session = this.getSession(socket);
+      const payload = this.validatePayload(PropertyActionSocketDto, body);
+      const result = await this.realtimeService.sellBuilding(session, payload.property_id);
+
+      this.server.to(this.roomName(session.roomId)).emit('room_state_update', result.state);
       this.scheduleTurnTimeout(session.roomId, result.state);
     } catch (error) {
       this.emitError(socket, error);

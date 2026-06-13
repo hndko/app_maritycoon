@@ -33,6 +33,16 @@ function buttons(): HTMLButtonElement[] {
   return Array.from(container?.querySelectorAll('button') ?? []);
 }
 
+function buttonByText(text: string): HTMLButtonElement {
+  const button = buttons().find((item) => item.textContent?.includes(text));
+
+  if (!button) {
+    throw new Error(`Button not found: ${text}`);
+  }
+
+  return button;
+}
+
 afterEach(() => {
   act(() => {
     root?.unmount();
@@ -52,13 +62,19 @@ describe('ActionPanel', () => {
         onBuyProperty={vi.fn()}
         onDeclareBankruptcy={vi.fn()}
         onEndTurn={vi.fn()}
+        onEndGame={vi.fn()}
+        onPayJailFine={vi.fn()}
         onMortgageProperty={vi.fn()}
         onRollDice={vi.fn()}
+        onSellBuilding={vi.fn()}
         onStartGame={onStartGame}
+        onToggleReady={vi.fn()}
+        onUseJailCard={vi.fn()}
         ownedBuildablePropertyId={null}
         ownedMortgageablePropertyId={null}
         pendingAction={null}
         playerCount={2}
+        playerIsReady={false}
         roomProperties={[]}
         session={session}
         status="waiting"
@@ -84,9 +100,14 @@ describe('ActionPanel', () => {
         onBuyProperty={onBuyProperty}
         onDeclareBankruptcy={vi.fn()}
         onEndTurn={onEndTurn}
+        onEndGame={vi.fn()}
+        onPayJailFine={vi.fn()}
         onMortgageProperty={onMortgageProperty}
         onRollDice={onRollDice}
+        onSellBuilding={vi.fn()}
         onStartGame={vi.fn()}
+        onToggleReady={vi.fn()}
+        onUseJailCard={vi.fn()}
         ownedBuildablePropertyId={1}
         ownedMortgageablePropertyId={3}
         pendingAction={{
@@ -96,6 +117,7 @@ describe('ActionPanel', () => {
           type: 'buy_property',
         }}
         playerCount={2}
+        playerIsReady={false}
         roomProperties={[
           {
             hotel_count: 0,
@@ -116,8 +138,8 @@ describe('ActionPanel', () => {
       />,
     );
 
-    buttons()[2].click();
-    buttons()[5].click();
+    buttonByText('Buy Property').click();
+    buttonByText('Mortgage').click();
 
     expect(onRollDice).not.toHaveBeenCalled();
     expect(onBuyProperty).toHaveBeenCalledWith(1);
@@ -137,9 +159,14 @@ describe('ActionPanel', () => {
         onBuyProperty={vi.fn()}
         onDeclareBankruptcy={onDeclareBankruptcy}
         onEndTurn={vi.fn()}
+        onEndGame={vi.fn()}
+        onPayJailFine={vi.fn()}
         onMortgageProperty={vi.fn()}
         onRollDice={vi.fn()}
+        onSellBuilding={vi.fn()}
         onStartGame={vi.fn()}
+        onToggleReady={vi.fn()}
+        onUseJailCard={vi.fn()}
         ownedBuildablePropertyId={null}
         ownedMortgageablePropertyId={null}
         pendingAction={{
@@ -150,6 +177,7 @@ describe('ActionPanel', () => {
           type: 'bankruptcy_resolution',
         }}
         playerCount={2}
+        playerIsReady={false}
         roomProperties={[]}
         session={session}
         status="playing"
@@ -162,7 +190,7 @@ describe('ActionPanel', () => {
       />,
     );
 
-    buttons()[6].click();
+    buttonByText('Bankruptcy').click();
     expect(onDeclareBankruptcy).toHaveBeenCalledTimes(1);
     expect(container?.textContent).toContain('Hutang');
   });

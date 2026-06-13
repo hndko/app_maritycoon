@@ -2,6 +2,15 @@
 
 ## Completed
 
+- MVP missing-item implementation:
+  - Added waiting-room ready status through Socket.IO and enforced all non-host players ready before host start.
+  - Added MVP host controls for kick player, transfer host, update waiting-room settings, and host end game.
+  - Completed jail MVP rules with pay fine, use get-out-of-jail card, roll double attempts, and third-failed-roll fine handling.
+  - Replaced static money-only Chance/Community Chest handling with backend card decks and MVP card effects for money, movement, jail, and jail-free card.
+  - Improved bankruptcy by adding building sale liquidation and blocking bankruptcy declaration when assets can still cover debt.
+  - Added game history from persisted `game_logs` into authoritative room state and room UI log display.
+  - Improved waiting-room UI with ready badges and host controls.
+  - Verified through lint, typecheck, and tests.
 - Release readiness hardening for Broken, Security Issues, and Multiplayer Risks:
   - Fixed room share links so `/room/{room_code}` can resolve through the room API and frontend socket flow uses the canonical room UUID.
   - Enforced invite-only rooms with invite codes and generated invite share URLs.

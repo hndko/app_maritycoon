@@ -80,6 +80,14 @@ export type PublicRoomsFilter = {
   full?: boolean;
 };
 
+export type UpdateRoomSettingsInput = {
+  roomId: string;
+  roomName: string;
+  maxPlayers: number;
+  startingMoney: number;
+  turnTimerSeconds: number;
+};
+
 @Injectable()
 export class RoomsRepository {
   constructor(private readonly database: DatabaseService) {}
@@ -317,6 +325,54 @@ export class RoomsRepository {
     );
 
     return result.rows[0] ?? null;
+  }
+
+  async setPlayerReady(roomId: string, playerId: string, isReady: boolean): Promise<void> {
+    await this.database.query(
+      'UPDATE room_players SET is_ready = $1 WHERE room_id = $2 AND id = $3',
+      [isReady, roomId, playerId],
+    );
+  }
+
+  async removePlayer(roomId: string, playerId: string): Promise<void> {
+    await this.database.query(
+      'DELETE FROM room_players WHERE room_id = $1 AND id = $2 AND is_host = FALSE',
+      [roomId, playerId],
+    );
+  }
+
+  async transferHost(roomId: string, fromPlayerId: string, toPlayerId: string): Promise<void> {
+    await this.database.transaction(async (client) => {
+      await client.query(
+        'UPDATE room_players SET is_host = FALSE WHERE room_id = $1 AND id = $2 AND is_host = TRUE',
+        [roomId, fromPlayerId],
+      );
+      await client.query(
+        'UPDATE room_players SET is_host = TRUE WHERE room_id = $1 AND id = $2',
+        [roomId, toPlayerId],
+      );
+    });
+  }
+
+  async updateRoomSettings(input: UpdateRoomSettingsInput): Promise<void> {
+    await this.database.query(
+      `
+        UPDATE rooms
+        SET room_name = $1, max_players = $2, starting_money = $3, turn_timer_seconds = $4
+        WHERE id = $5 AND status = 'waiting'
+      `,
+      [
+        input.roomName,
+        input.maxPlayers,
+        input.startingMoney,
+        input.turnTimerSeconds,
+        input.roomId,
+      ],
+    );
+  }
+
+  async finishRoom(roomId: string): Promise<void> {
+    await this.database.query("UPDATE rooms SET status = 'finished' WHERE id = $1", [roomId]);
   }
 
   async startGame(roomId: string, startingMoney: number): Promise<StartedGameRecord> {

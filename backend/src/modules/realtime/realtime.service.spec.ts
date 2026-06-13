@@ -84,7 +84,7 @@ function createHarness() {
   ]);
   const players = [
     createPlayer('aaaaaaaa-1111-4111-8111-111111111111', roomA.id, 'Host A', true),
-    createPlayer('bbbbbbbb-1111-4111-8111-111111111111', roomA.id, 'Player A'),
+    { ...createPlayer('bbbbbbbb-1111-4111-8111-111111111111', roomA.id, 'Player A'), is_ready: true },
     createPlayer('cccccccc-2222-4222-8222-222222222222', roomB.id, 'Host B', true),
   ];
   const properties: PropertyRecord[] = [
@@ -194,9 +194,43 @@ function createHarness() {
         players: roomPlayers,
       };
     }),
+    setPlayerReady: vi.fn(async (roomId: string, playerId: string, isReady: boolean) => {
+      const player = players.find((item) => item.room_id === roomId && item.id === playerId);
+      if (player) {
+        player.is_ready = isReady;
+      }
+    }),
+    removePlayer: vi.fn(async (roomId: string, playerId: string) => {
+      const index = players.findIndex((item) => item.room_id === roomId && item.id === playerId && !item.is_host);
+      if (index >= 0) {
+        players.splice(index, 1);
+      }
+    }),
+    transferHost: vi.fn(async (roomId: string, fromPlayerId: string, toPlayerId: string) => {
+      const from = players.find((item) => item.room_id === roomId && item.id === fromPlayerId);
+      const to = players.find((item) => item.room_id === roomId && item.id === toPlayerId);
+      if (from) from.is_host = false;
+      if (to) to.is_host = true;
+    }),
+    updateRoomSettings: vi.fn(async (input: { roomId: string; roomName: string; maxPlayers: number; startingMoney: number; turnTimerSeconds: number }) => {
+      const room = rooms.get(input.roomId);
+      if (room) {
+        room.room_name = input.roomName;
+        room.max_players = input.maxPlayers;
+        room.starting_money = input.startingMoney;
+        room.turn_timer_seconds = input.turnTimerSeconds;
+      }
+    }),
+    finishRoom: vi.fn(async (roomId: string) => {
+      const room = rooms.get(roomId);
+      if (room) {
+        room.status = 'finished';
+      }
+    }),
   };
   const gameRepository = {
     appendLog,
+    listLogs: vi.fn(async () => []),
     initializeRoomProperties: vi.fn(async (roomId: string) => {
       for (const property of properties) {
         if (!roomProperties.some((roomProperty) => roomProperty.property_id === property.id)) {
@@ -311,6 +345,26 @@ function createHarness() {
         property.is_mortgaged = false;
       }
     }),
+    sellBuilding: vi.fn(
+      async (
+        _roomId: string,
+        propertyId: number,
+        playerId: string,
+        refund: number,
+        nextHouseCount: number,
+        nextHotelCount: number,
+      ) => {
+        const player = players.find((item) => item.id === playerId);
+        const property = roomProperties.find((item) => item.property_id === propertyId);
+        if (player) {
+          player.money += refund;
+        }
+        if (property) {
+          property.house_count = nextHouseCount;
+          property.hotel_count = nextHotelCount;
+        }
+      },
+    ),
     markPlayerBankrupt: vi.fn(async (playerId: string) => {
       const player = players.find((item) => item.id === playerId);
       if (player) {

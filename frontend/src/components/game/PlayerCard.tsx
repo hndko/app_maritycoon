@@ -34,6 +34,9 @@ export function PlayerCard({
           {isCurrentTurn ? 'Giliran' : `Posisi ${player.position}`}
         </Badge>
         {player.is_bankrupt ? <Badge tone="red">Bankrupt</Badge> : null}
+        {player.is_ready ? <Badge tone="green">Ready</Badge> : null}
+        {player.is_in_jail ? <Badge tone="red">Jail {player.jail_turns ?? 0}/3</Badge> : null}
+        {player.get_out_of_jail_cards ? <Badge tone="blue">Jail Card</Badge> : null}
         {player.turn_order ? <Badge tone="blue">#{player.turn_order}</Badge> : null}
       </div>
     </Card>
