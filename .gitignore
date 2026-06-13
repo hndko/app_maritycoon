@@ -35,6 +35,9 @@ playwright-report/
 test-results/
 load-results/
 *.har
+backups/
+*.dump
+*.sql.gz
 
 # Docker and local database volumes
 docker/data/

@@ -2,6 +2,17 @@
 
 ## Completed
 
+- Production readiness critical/high remediation:
+  - Added production Docker Compose stack with internal-only PostgreSQL/Redis networks, Redis authentication, service health dependencies, resource limits, and Nginx reverse proxy.
+  - Added Nginx HTTPS/WebSocket reverse proxy configuration with TLS placeholders and security headers.
+  - Hardened backend and frontend Docker runtime images with non-root execution and container health checks.
+  - Added production environment validation for HTTPS public origins, Redis authentication, non-default database password, trust proxy, and JSON log format.
+  - Added structured JSON application logger and HTTP request logging for production observability.
+  - Added Prometheus-compatible `/api/metrics` endpoint for basic process uptime and memory metrics.
+  - Updated `/api/health` to return HTTP 503 when PostgreSQL or Redis readiness is degraded.
+  - Moved REST API rate limiting to Redis when available so rate limits work across multiple backend instances.
+  - Added PostgreSQL backup, restore, and rollback helper scripts.
+  - Updated `.gitignore`, environment examples, README, and AGENTS guidance for production artifacts and operations.
 - Final PRD compliance completion:
   - Added Play Again flow for finished rooms through host-triggered Socket.IO `play_again`, resetting players, room properties, ready state, and gameplay state back to waiting.
   - Added winner dialog with leaderboard summary and host Play Again action.
@@ -162,7 +173,7 @@
 - Keep `.gitignore` updated as project tooling and generated artifacts are added.
 - Keep documentation numbering updated when new long-lived docs are added.
 - Keep `README.md` and `AGENTS.md` updated whenever features, commands, architecture, deployment, or workflow rules change.
-- Production hardening validation against live PostgreSQL/Redis/staging backend when environment URLs are available.
+- Production hardening validation against live PostgreSQL/Redis/staging backend when environment URLs and TLS certificates are available.
 
 ## Remaining
 
@@ -176,6 +187,8 @@
 - `npm audit` still reports dev-only vulnerabilities, while production audit (`npm audit --omit=dev`) is clean.
 - Local host PostgreSQL connection using `localhost:5432` may collide with Windows/Laragon networking; Docker Compose service-to-service verification works using the backend container and `postgres` hostname.
 - Production hardening integration tests are present but skip by default unless `DATABASE_URL_TEST` and `SOCKET_TEST_URL` are configured.
+- Production deployment still requires real TLS certificates in `docker/nginx/certs` or an ACME-enabled reverse proxy replacement before public launch.
+- Backup/restore scripts require PostgreSQL client tools (`pg_dump` and `pg_restore`) in the execution environment.
 - Backend coverage command currently fails the global 80% threshold on the broad service coverage surface; required lint/typecheck/test gates pass.
 - Design/components mention trade UI, while PRD lists trading as a future feature.
 - Reconnect currently uses room/player identity and Redis socket state; durable guest session token mechanics still need frontend/session hardening.

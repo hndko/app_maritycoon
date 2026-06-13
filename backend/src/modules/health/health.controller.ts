@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, HttpException, HttpStatus } from '@nestjs/common';
 import { DatabaseService } from '../../infrastructure/database/database.service';
 import { RedisService } from '../../infrastructure/redis/redis.service';
 
@@ -25,7 +25,7 @@ export class HealthController {
       this.checkRedis(),
     ]);
 
-    return {
+    const response: HealthResponse = {
       status: postgres === 'ok' && redis === 'ok' ? 'ok' : 'degraded',
       service: 'maritycoon-backend',
       dependencies: {
@@ -33,6 +33,12 @@ export class HealthController {
         redis,
       },
     };
+
+    if (response.status === 'degraded') {
+      throw new HttpException(response, HttpStatus.SERVICE_UNAVAILABLE);
+    }
+
+    return response;
   }
 
   private async checkPostgres(): Promise<'ok' | 'error'> {

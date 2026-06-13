@@ -129,6 +129,8 @@ npm run test:integration:postgres
 npm run test:integration:socket
 npm run test:e2e:multiplayer
 npm run test:load
+docker build -f backend/Dockerfile -t maritycoon-backend:local .
+docker build -f frontend/Dockerfile -t maritycoon-frontend:local .
 ```
 
 ## Testing Notes
@@ -150,6 +152,9 @@ Wajib dijaga:
 - Reconnect slot dipertahankan sesuai requirement.
 - Turn timer harus server-side dan aman untuk multi-instance.
 - Health check harus memantau PostgreSQL dan Redis.
+- Production harus memakai HTTPS public origin, `TRUST_PROXY=true`, Redis password, database password non-default, dan `LOG_FORMAT=json`.
+- PostgreSQL/Redis tidak boleh diekspos langsung ke internet pada konfigurasi production.
+- Jalankan backup sebelum migration/deployment berisiko dan verifikasi restore secara berkala.
 
 ## Area yang Tidak Boleh Dikerjakan Tanpa Scope Baru
 

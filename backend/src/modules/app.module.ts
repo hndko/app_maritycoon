@@ -5,13 +5,16 @@ import { RateLimitGuard } from '../infrastructure/security/rate-limit.guard';
 import { GameModule } from './game/game.module';
 import { GuestsModule } from './guests/guests.module';
 import { HealthController } from './health/health.controller';
+import { MetricsController } from './metrics/metrics.controller';
+import { MetricsService } from './metrics/metrics.service';
 import { RealtimeModule } from './realtime/realtime.module';
 import { RoomsModule } from './rooms/rooms.module';
 
 @Module({
   imports: [DatabaseModule, GuestsModule, RoomsModule, GameModule, RealtimeModule],
-  controllers: [HealthController],
+  controllers: [HealthController, MetricsController],
   providers: [
+    MetricsService,
     {
       provide: APP_GUARD,
       useClass: RateLimitGuard,

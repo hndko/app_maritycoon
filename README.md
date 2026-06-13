@@ -21,9 +21,9 @@
 | Backend | NestJS, Socket.IO Gateway, repository pattern, validation, rate limit |
 | Database | PostgreSQL dengan migration dan seed board 40 tile |
 | Realtime | Redis active state, Redis Socket.IO adapter, reconnect, distributed turn timer |
-| Reliability | Health check PostgreSQL/Redis, restart timer recovery, session token hardening |
+| Reliability | Health check PostgreSQL/Redis, metrics endpoint, restart timer recovery, session token hardening |
 | Testing | Unit test, integration test opt-in, multiplayer smoke script, load-test script |
-| Deployment | Docker Compose untuk frontend, backend, PostgreSQL, dan Redis |
+| Deployment | Docker Compose local/prod, Nginx reverse proxy, Docker healthcheck |
 
 ## Fitur Utama
 
@@ -93,6 +93,7 @@ copy frontend\.env.example frontend\.env
 ```
 
 Untuk production, pastikan `SESSION_TOKEN_SECRET` kuat minimal 32 karakter dan semua URL environment eksplisit.
+Production juga wajib memakai HTTPS origin, `TRUST_PROXY=true`, Redis password, dan database password non-default.
 
 ### 3. Jalankan dependency service
 
@@ -118,6 +119,44 @@ Default URL:
 - Frontend: `http://localhost:3000`
 - Backend API: `http://localhost:4000/api`
 - Health check: `http://localhost:4000/api/health`
+- Metrics: `http://localhost:4000/api/metrics`
+
+## Production Operations
+
+Production Compose tersedia di `docker-compose.prod.yml` dan memakai:
+
+- Nginx reverse proxy untuk HTTPS, WebSocket upgrade, dan security headers.
+- Internal network untuk PostgreSQL dan Redis agar tidak terekspos langsung.
+- Redis password dan append-only persistence.
+- Backend/frontend container health checks.
+- JSON logging melalui `LOG_FORMAT=json`.
+
+Sebelum deploy production, siapkan certificate:
+
+```text
+docker/nginx/certs/fullchain.pem
+docker/nginx/certs/privkey.pem
+```
+
+Contoh build image lokal:
+
+```bash
+docker build -f backend/Dockerfile -t maritycoon-backend:local .
+docker build -f frontend/Dockerfile -t maritycoon-frontend:local .
+```
+
+Backup dan restore PostgreSQL:
+
+```bash
+DATABASE_URL=postgresql://user:password@host:5432/db scripts/backup-postgres.sh
+DATABASE_URL=postgresql://user:password@host:5432/db scripts/restore-postgres.sh backups/file.dump
+```
+
+Rollback helper:
+
+```bash
+scripts/rollback-deploy.sh previous-image-tag
+```
 
 ## Quality Gates
 
@@ -171,6 +210,7 @@ Fokus yang sudah dikerjakan:
 - Distributed turn timer.
 - Restart timer recovery.
 - Health checks untuk PostgreSQL dan Redis.
+- Production Docker Compose, Nginx reverse proxy, JSON logging, metrics endpoint, backup/restore helper, dan Docker health checks.
 
 Area yang masih perlu keputusan/lanjutan:
 
@@ -178,6 +218,7 @@ Area yang masih perlu keputusan/lanjutan:
 - Spectator, jika nanti masuk scope.
 - Trade tetap non-MVP sampai di-scope ulang.
 - Validasi integration/E2E terhadap environment staging/live.
+- Validasi certificate, backup restore drill, dan load test di staging/live sebelum public production launch.
 
 ## Maintenance Note
 
