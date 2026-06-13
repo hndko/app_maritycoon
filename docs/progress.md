@@ -2,6 +2,9 @@
 
 ## Completed
 
+- Closed Beta release package:
+  - Added `CHANGELOG.md`, `RELEASE_NOTES.md`, `TESTING_GUIDE.md`, and `KNOWN_ISSUES.md`.
+  - Added `docs/17. Closed-Beta-Launch-Package.md` with launch plan, tester instructions, bug reporting template, feedback collection template, rollback plan, and go/no-go checklist for 20-50 testers.
 - Staging validation readiness:
   - Added `docs/16. Staging-Validation-Checklist.md` with QA-ready 2-player, 4-player, and 8-player staging scenarios covering create room, join room, invite room, reconnect, disconnect, turn timer, property buy, rent, jail, bankruptcy, winner, and Play Again.
 - Production readiness critical/high remediation:
