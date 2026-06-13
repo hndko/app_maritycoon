@@ -2,6 +2,8 @@
 
 ## Completed
 
+- Staging validation readiness:
+  - Added `docs/16. Staging-Validation-Checklist.md` with QA-ready 2-player, 4-player, and 8-player staging scenarios covering create room, join room, invite room, reconnect, disconnect, turn timer, property buy, rent, jail, bankruptcy, winner, and Play Again.
 - Production readiness critical/high remediation:
   - Added VPS deployment package with `docker-compose.production.yml`, root `nginx.conf`, `.env.production.example`, `deploy.sh`, `backup.sh`, `restore.sh`, and `docs/deployment-guide.md`.
   - Added production Docker Compose stack with internal-only PostgreSQL/Redis networks, Redis authentication, service health dependencies, resource limits, and Nginx reverse proxy.
