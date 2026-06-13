@@ -44,7 +44,9 @@ jobs:
           PUBLIC_API_URL: https://maritycoon.example
           PUBLIC_SOCKET_URL: https://maritycoon.example
           SESSION_TOKEN_SECRET: 0123456789abcdef0123456789abcdef
-        run: docker compose -f docker-compose.prod.yml config --quiet
+        run: |
+          docker compose -f docker-compose.prod.yml config --quiet
+          docker compose -f docker-compose.production.yml config --quiet
 
       - name: Build backend image
         run: docker build -f backend/Dockerfile -t maritycoon-backend:ci .

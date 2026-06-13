@@ -3,6 +3,7 @@
 ## Completed
 
 - Production readiness critical/high remediation:
+  - Added VPS deployment package with `docker-compose.production.yml`, root `nginx.conf`, `.env.production.example`, `deploy.sh`, `backup.sh`, `restore.sh`, and `docs/deployment-guide.md`.
   - Added production Docker Compose stack with internal-only PostgreSQL/Redis networks, Redis authentication, service health dependencies, resource limits, and Nginx reverse proxy.
   - Added Nginx HTTPS/WebSocket reverse proxy configuration with TLS placeholders and security headers.
   - Hardened backend and frontend Docker runtime images with non-root execution and container health checks.

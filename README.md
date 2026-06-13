@@ -123,7 +123,9 @@ Default URL:
 
 ## Production Operations
 
-Production Compose tersedia di `docker-compose.prod.yml` dan memakai:
+Production Compose tersedia di `docker-compose.prod.yml` dan package deployment VPS tersedia lewat `docker-compose.production.yml`.
+
+Deployment package siap pakai berisi `docker-compose.production.yml`, `nginx.conf`, `.env.production.example`, `deploy.sh`, `backup.sh`, `restore.sh`, dan `docs/deployment-guide.md`.
 
 - Nginx reverse proxy untuk HTTPS, WebSocket upgrade, dan security headers.
 - Internal network untuk PostgreSQL dan Redis agar tidak terekspos langsung.
@@ -157,6 +159,12 @@ Rollback helper:
 
 ```bash
 scripts/rollback-deploy.sh previous-image-tag
+```
+
+One-command deployment di VPS setelah environment dan SSL siap:
+
+```bash
+./deploy.sh
 ```
 
 ## Quality Gates
@@ -197,6 +205,7 @@ Catatan:
 - [Game Rules](docs/07.%20game-rules.md)
 - [Architecture](docs/08.%20Architecture.md)
 - [Progress](docs/progress.md)
+- [Deployment Guide](docs/deployment-guide.md)
 
 ## Status Project
 
