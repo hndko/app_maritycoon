@@ -38,6 +38,7 @@ load-results/
 backups/
 *.dump
 *.sql.gz
+.remove-deploy.*.env
 
 # Docker and local database volumes
 docker/data/

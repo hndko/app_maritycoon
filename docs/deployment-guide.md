@@ -218,6 +218,8 @@ Hapus deployment Docker tanpa menghapus data persisten:
 ./remove-deploy.sh
 ```
 
+Script ini tetap dapat berjalan walaupun `.env.production` belum ada, karena remove operation memakai fallback env sementara hanya untuk memenuhi interpolasi Docker Compose.
+
 Hapus deployment beserta local images hasil build Compose:
 
 ```bash

@@ -6,6 +6,8 @@ COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.production.yml}"
 REMOVE_VOLUMES=false
 REMOVE_LOCAL_IMAGES=false
 REMOVE_ALL=false
+TEMP_ENV_FILE=""
+COMPOSE_ENV_FILE=""
 
 usage() {
   cat <<'EOF'
@@ -61,6 +63,34 @@ if [ ! -f "${COMPOSE_FILE}" ]; then
   exit 1
 fi
 
+cleanup() {
+  if [ -n "${TEMP_ENV_FILE}" ] && [ -f "${TEMP_ENV_FILE}" ]; then
+    rm -f "${TEMP_ENV_FILE}"
+  fi
+}
+
+trap cleanup EXIT
+
+prepare_compose_env_file() {
+  if [ -f "${ENV_FILE}" ]; then
+    COMPOSE_ENV_FILE="${ENV_FILE}"
+    return
+  fi
+
+  TEMP_ENV_FILE="$(mktemp .remove-deploy.XXXXXX.env)"
+  COMPOSE_ENV_FILE="${TEMP_ENV_FILE}"
+  cat > "${TEMP_ENV_FILE}" <<'EOF'
+POSTGRES_DB=maritycoon
+POSTGRES_USER=maritycoon_app
+POSTGRES_PASSWORD=remove-deploy-placeholder
+REDIS_PASSWORD=remove-deploy-placeholder
+PUBLIC_APP_URL=https://remove-deploy.local
+PUBLIC_API_URL=https://remove-deploy.local
+PUBLIC_SOCKET_URL=https://remove-deploy.local
+SESSION_TOKEN_SECRET=remove-deploy-placeholder-0123456789
+EOF
+}
+
 DOWN_ARGS="--remove-orphans"
 
 if [ "${REMOVE_ALL}" = "true" ]; then
@@ -102,10 +132,7 @@ if [ "${REMOVE_LOCAL_IMAGES}" = "true" ] && [ "${REMOVE_ALL}" != "true" ]; then
   DOWN_ARGS="${DOWN_ARGS} --rmi local"
 fi
 
-if [ -f "${ENV_FILE}" ]; then
-  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" down ${DOWN_ARGS}
-else
-  docker compose -f "${COMPOSE_FILE}" down ${DOWN_ARGS}
-fi
+prepare_compose_env_file
+docker compose --env-file "${COMPOSE_ENV_FILE}" -f "${COMPOSE_FILE}" down ${DOWN_ARGS}
 
 echo "deployment_removed=true"
