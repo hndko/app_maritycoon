@@ -2,6 +2,16 @@
 
 ## Completed
 
+- Release readiness hardening for Broken, Security Issues, and Multiplayer Risks:
+  - Fixed room share links so `/room/{room_code}` can resolve through the room API and frontend socket flow uses the canonical room UUID.
+  - Enforced invite-only rooms with invite codes and generated invite share URLs.
+  - Added signed session tokens to create/join responses and required them for Socket.IO `join_room`.
+  - Added server-side turn deadlines, Socket.IO gateway timeout scheduling, and overdue turn expiration.
+  - Added stuck-room prevention by skipping the current player on disconnect during skippable phases.
+  - Added Redis-backed Socket.IO action rate limiting for gameplay actions.
+  - Fixed state versioning so read-only room state fetches no longer increment versions.
+  - Added regression tests for invite-only joins, session validation, state version reads, disconnect skip-turn, turn timeout, and socket action rate limiting.
+  - Verified hardening through lint, typecheck, and tests.
 - Phase 7 Testing:
   - Added explicit workspace coverage scripts with Vitest V8 coverage provider.
   - Added frontend unit coverage gate for game components, UI primitives, board helpers, formatting helpers, and room session persistence.

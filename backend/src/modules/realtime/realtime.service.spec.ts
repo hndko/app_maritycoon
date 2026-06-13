@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { createHmac } from 'node:crypto';
 import { RedisService } from '../../infrastructure/redis/redis.service';
 import { GameRepository, PropertyRecord, RoomPropertyRecord } from '../game/game.repository';
 import {
@@ -351,15 +352,38 @@ function createHarness() {
   };
 }
 
+function createSessionToken(roomId: string, playerId: string): string {
+  const payload = Buffer.from(
+    JSON.stringify({
+      exp: Date.now() + 60_000,
+      player_id: playerId,
+      room_id: roomId,
+    }),
+  ).toString('base64url');
+  const signature = createHmac('sha256', process.env.SESSION_TOKEN_SECRET ?? 'dev-session-secret')
+    .update(payload)
+    .digest('base64url');
+
+  return `${payload}.${signature}`;
+}
+
+function joinPayload(roomId: string, playerId: string, userNickname: string) {
+  return {
+    room_id: roomId,
+    player_id: playerId,
+    user_nickname: userNickname,
+    session_token: createSessionToken(roomId, playerId),
+  };
+}
+
 describe('RealtimeService', () => {
   it('joins a socket to an existing player slot and isolates room state', async () => {
     const { service } = createHarness();
 
-    const state = await service.joinRoom('socket-a', {
-      room_id: roomA.id,
-      player_id: 'aaaaaaaa-1111-4111-8111-111111111111',
-      user_nickname: 'Host A',
-    });
+    const state = await service.joinRoom(
+      'socket-a',
+      joinPayload(roomA.id, 'aaaaaaaa-1111-4111-8111-111111111111', 'Host A'),
+    );
 
     expect(state.room_id).toBe(roomA.id);
     expect(state.players).toHaveLength(2);
@@ -371,30 +395,73 @@ describe('RealtimeService', () => {
     const { service } = createHarness();
 
     await expect(
+      service.joinRoom(
+        'socket-a',
+        joinPayload(roomA.id, 'cccccccc-2222-4222-8222-222222222222', 'Host B'),
+      ),
+    ).rejects.toThrow('Player is not part of this room');
+  });
+
+  it('rejects socket joins without a valid session token', async () => {
+    const { service } = createHarness();
+
+    await expect(
       service.joinRoom('socket-a', {
         room_id: roomA.id,
-        player_id: 'cccccccc-2222-4222-8222-222222222222',
-        user_nickname: 'Host B',
+        player_id: 'aaaaaaaa-1111-4111-8111-111111111111',
+        user_nickname: 'Host A',
+        session_token: 'invalid-token',
       }),
-    ).rejects.toThrow('Player is not part of this room');
+    ).rejects.toThrow('Invalid session token');
+  });
+
+  it('does not bump state version for read-only room state fetches', async () => {
+    const { service } = createHarness();
+
+    const joined = await service.joinRoom(
+      'socket-a',
+      joinPayload(roomA.id, 'aaaaaaaa-1111-4111-8111-111111111111', 'Host A'),
+    );
+    const fetched = await service.getRoomState(roomA.id);
+
+    expect(fetched.state_version).toBe(joined.state_version);
   });
 
   it('marks disconnected players for reconnect without removing their slot', async () => {
     const { service } = createHarness();
 
-    await service.joinRoom('socket-a', {
-      room_id: roomA.id,
-      player_id: 'aaaaaaaa-1111-4111-8111-111111111111',
-      user_nickname: 'Host A',
-    });
-    const session = await service.disconnect('socket-a');
+    await service.joinRoom(
+      'socket-a',
+      joinPayload(roomA.id, 'aaaaaaaa-1111-4111-8111-111111111111', 'Host A'),
+    );
+    const result = await service.disconnect('socket-a');
     const state = await service.getRoomState(roomA.id);
-    const host = state.players.find((player) => player.id === session?.playerId);
+    const host = state.players.find((player) => player.id === result?.session.playerId);
 
-    expect(session?.roomId).toBe(roomA.id);
+    expect(result?.session.roomId).toBe(roomA.id);
     expect(host?.is_connected).toBe(false);
     expect(host?.disconnected_at).toEqual(expect.any(String));
     expect(state.players).toHaveLength(2);
+  });
+
+  it('skips the current player when they disconnect during a skippable turn phase', async () => {
+    const { service } = createHarness();
+
+    await service.joinRoom(
+      'socket-a',
+      joinPayload(roomA.id, 'aaaaaaaa-1111-4111-8111-111111111111', 'Host A'),
+    );
+    await service.startGame({
+      socketId: 'socket-a',
+      roomId: roomA.id,
+      playerId: 'aaaaaaaa-1111-4111-8111-111111111111',
+      playerName: 'Host A',
+    });
+
+    const result = await service.disconnect('socket-a');
+
+    expect(result?.turnChanged?.next_player_id).toBe('bbbbbbbb-1111-4111-8111-111111111111');
+    expect(result?.state.turn.current_player_id).toBe('bbbbbbbb-1111-4111-8111-111111111111');
   });
 
   it('allows only the host to start a waiting game with at least two players', async () => {
@@ -411,7 +478,53 @@ describe('RealtimeService', () => {
     expect(result.state.status).toBe('playing');
     expect(result.state.current_turn_player_id).toBe('aaaaaaaa-1111-4111-8111-111111111111');
     expect(result.state.turn.phase).toBe('await_roll');
+    expect(result.state.turn.deadline_at).toEqual(expect.any(String));
     expect(result.state.players.every((player) => player.money === roomA.starting_money)).toBe(true);
+  });
+
+  it('expires overdue turns server-side and advances to the next player', async () => {
+    const { service, stateStore } = createHarness();
+    const session = {
+      socketId: 'socket-a',
+      roomId: roomA.id,
+      playerId: 'aaaaaaaa-1111-4111-8111-111111111111',
+      playerName: 'Host A',
+    };
+
+    await service.startGame(session);
+    await stateStore.setGameplayState(roomA.id, {
+      current_player_id: session.playerId,
+      phase: 'await_roll',
+      double_count: 0,
+      dice: null,
+      pending_action: null,
+      jailed_player_ids: [],
+      winner_id: null,
+      turn_started_at: '2026-01-01T00:00:00.000Z',
+      turn_deadline_at: '2026-01-01T00:00:01.000Z',
+    });
+
+    const turnChanged = await service.expireTurnIfOverdue(roomA.id);
+    const state = await service.getRoomState(roomA.id);
+
+    expect(turnChanged?.next_player_id).toBe('bbbbbbbb-1111-4111-8111-111111111111');
+    expect(state.turn.current_player_id).toBe('bbbbbbbb-1111-4111-8111-111111111111');
+  });
+
+  it('rate limits repeated socket gameplay actions', async () => {
+    const { service } = createHarness();
+    const session = {
+      socketId: 'socket-a',
+      roomId: roomA.id,
+      playerId: 'bbbbbbbb-1111-4111-8111-111111111111',
+      playerName: 'Player A',
+    };
+
+    for (let index = 0; index < 10; index += 1) {
+      await expect(service.startGame(session)).rejects.toThrow('Only host can start the game');
+    }
+
+    await expect(service.startGame(session)).rejects.toThrow('Socket action rate limit exceeded');
   });
 
   it('rejects non-host start_game actions', async () => {

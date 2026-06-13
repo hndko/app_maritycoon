@@ -36,6 +36,7 @@ import { socketRoomPrefix, SocketErrorPayload, SocketSession } from './realtime.
 )
 export class RealtimeGateway implements OnGatewayDisconnect {
   private readonly logger = new Logger(RealtimeGateway.name);
+  private readonly turnTimers = new Map<string, NodeJS.Timeout>();
 
   @WebSocketServer()
   server!: Server;
@@ -61,6 +62,7 @@ export class RealtimeGateway implements OnGatewayDisconnect {
       await socket.join(this.roomName(payload.room_id));
       socket.emit('room_state_update', state);
       socket.to(this.roomName(payload.room_id)).emit('room_state_update', state);
+      this.scheduleTurnTimeout(payload.room_id, state);
     } catch (error) {
       this.emitError(socket, error);
     }
@@ -90,6 +92,7 @@ export class RealtimeGateway implements OnGatewayDisconnect {
 
       this.server.to(this.roomName(session.roomId)).emit('game_started', started);
       this.server.to(this.roomName(session.roomId)).emit('room_state_update', state);
+      this.scheduleTurnTimeout(session.roomId, state);
     } catch (error) {
       this.emitError(socket, error);
     }
@@ -125,6 +128,7 @@ export class RealtimeGateway implements OnGatewayDisconnect {
       }
 
       this.server.to(roomName).emit('room_state_update', result.state);
+      this.scheduleTurnTimeout(session.roomId, result.state);
     } catch (error) {
       this.emitError(socket, error);
     }
@@ -149,6 +153,7 @@ export class RealtimeGateway implements OnGatewayDisconnect {
       }
 
       this.server.to(roomName).emit('room_state_update', result.state);
+      this.scheduleTurnTimeout(session.roomId, result.state);
     } catch (error) {
       this.emitError(socket, error);
     }
@@ -173,6 +178,7 @@ export class RealtimeGateway implements OnGatewayDisconnect {
       }
 
       this.server.to(roomName).emit('room_state_update', result.state);
+      this.scheduleTurnTimeout(session.roomId, result.state);
     } catch (error) {
       this.emitError(socket, error);
     }
@@ -188,6 +194,7 @@ export class RealtimeGateway implements OnGatewayDisconnect {
       const payload = this.validatePayload(PropertyActionSocketDto, body);
       const result = await this.realtimeService.mortgageProperty(session, payload.property_id);
       this.server.to(this.roomName(session.roomId)).emit('room_state_update', result.state);
+      this.scheduleTurnTimeout(session.roomId, result.state);
     } catch (error) {
       this.emitError(socket, error);
     }
@@ -203,6 +210,7 @@ export class RealtimeGateway implements OnGatewayDisconnect {
       const payload = this.validatePayload(PropertyActionSocketDto, body);
       const result = await this.realtimeService.unmortgageProperty(session, payload.property_id);
       this.server.to(this.roomName(session.roomId)).emit('room_state_update', result.state);
+      this.scheduleTurnTimeout(session.roomId, result.state);
     } catch (error) {
       this.emitError(socket, error);
     }
@@ -222,6 +230,7 @@ export class RealtimeGateway implements OnGatewayDisconnect {
       }
 
       this.server.to(roomName).emit('room_state_update', result.state);
+      this.scheduleTurnTimeout(session.roomId, result.state);
     } catch (error) {
       this.emitError(socket, error);
     }
@@ -236,21 +245,28 @@ export class RealtimeGateway implements OnGatewayDisconnect {
 
       this.server.to(roomName).emit('turn_changed', result.turnChanged);
       this.server.to(roomName).emit('room_state_update', result.state);
+      this.scheduleTurnTimeout(session.roomId, result.state);
     } catch (error) {
       this.emitError(socket, error);
     }
   }
 
   async handleDisconnect(socket: Socket): Promise<void> {
-    const session = await this.realtimeService.disconnect(socket.id);
+    const result = await this.realtimeService.disconnect(socket.id);
 
-    if (!session) {
+    if (!result) {
       return;
     }
 
     try {
-      const state = await this.realtimeService.getRoomState(session.roomId);
-      this.server.to(this.roomName(session.roomId)).emit('room_state_update', state);
+      const roomName = this.roomName(result.session.roomId);
+
+      if (result.turnChanged) {
+        this.server.to(roomName).emit('turn_changed', result.turnChanged);
+      }
+
+      this.server.to(roomName).emit('room_state_update', result.state);
+      this.scheduleTurnTimeout(result.session.roomId, result.state);
     } catch (error) {
       this.logger.warn(`Failed to broadcast disconnect state: ${String(error)}`);
     }
@@ -293,5 +309,45 @@ export class RealtimeGateway implements OnGatewayDisconnect {
     };
 
     socket.emit('error', payload);
+  }
+
+  private scheduleTurnTimeout(
+    roomId: string,
+    state: { status: string; turn?: { deadline_at: string | null; phase: string } },
+  ): void {
+    const existing = this.turnTimers.get(roomId);
+
+    if (existing) {
+      clearTimeout(existing);
+      this.turnTimers.delete(roomId);
+    }
+
+    if (state.status !== 'playing' || !state.turn?.deadline_at || state.turn.phase === 'finished') {
+      return;
+    }
+
+    const delay = Math.max(0, Date.parse(state.turn.deadline_at) - Date.now());
+    const timer = setTimeout(() => {
+      void this.handleTurnTimeout(roomId);
+    }, delay);
+
+    this.turnTimers.set(roomId, timer);
+  }
+
+  private async handleTurnTimeout(roomId: string): Promise<void> {
+    try {
+      const turnChanged = await this.realtimeService.expireTurnIfOverdue(roomId);
+      const state = await this.realtimeService.getRoomState(roomId);
+      const roomName = this.roomName(roomId);
+
+      if (turnChanged) {
+        this.server.to(roomName).emit('turn_changed', turnChanged);
+      }
+
+      this.server.to(roomName).emit('room_state_update', state);
+      this.scheduleTurnTimeout(roomId, state);
+    } catch (error) {
+      this.logger.warn(`Failed to process turn timeout: ${String(error)}`);
+    }
   }
 }

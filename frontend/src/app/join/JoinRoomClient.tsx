@@ -49,6 +49,7 @@ export function JoinRoomClient() {
         playerName,
         roomCode,
         roomId: joined.room_id,
+        sessionToken: joined.session_token,
       });
       router.push(`/room/${joined.room_id}`);
     } catch (submitError) {

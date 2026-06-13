@@ -4,7 +4,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { randomBytes } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import { PasswordService } from '../../infrastructure/security/password.service';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { JoinRoomDto } from './dto/join-room.dto';
@@ -23,6 +23,7 @@ export type CreateRoomResponse = {
   share_url: string;
   guest_id: string;
   player_id: string;
+  session_token: string;
 };
 
 export type JoinRoomResponse =
@@ -35,6 +36,7 @@ export type JoinRoomResponse =
       status: 'success';
       guest_id: string;
       player_id: string;
+      session_token: string;
     };
 
 export type RoomDetailResponse = {
@@ -87,9 +89,10 @@ export class RoomsService {
     return {
       room_id: created.room_id,
       room_code: created.room_code,
-      share_url: this.createShareUrl(created.room_code),
+      share_url: this.createShareUrl(created.room_code, inviteCode),
       guest_id: created.host_guest_id,
       player_id: created.host_player_id,
+      session_token: this.createSessionToken(created.room_id, created.host_player_id),
     };
   }
 
@@ -111,6 +114,10 @@ export class RoomsService {
 
     if (room.status === 'finished') {
       throw new ConflictException('Room is finished');
+    }
+
+    if (room.visibility === 'invite_only' && input.invite_code !== room.invite_code) {
+      throw new UnauthorizedException('Invalid room invite');
     }
 
     if (room.password_hash && !input.password) {
@@ -150,11 +157,12 @@ export class RoomsService {
       status: 'success',
       guest_id: player.guest_id,
       player_id: player.player_id,
+      session_token: this.createSessionToken(room.id, player.player_id),
     };
   }
 
   async getRoom(roomId: string): Promise<RoomDetailResponse> {
-    const room = await this.roomsRepository.findById(roomId);
+    const room = await this.roomsRepository.findByReference(roomId);
 
     if (!room) {
       throw new NotFoundException('Room not found');
@@ -200,8 +208,28 @@ export class RoomsService {
     throw new ConflictException('Unable to generate unique room code');
   }
 
-  private createShareUrl(roomCode: string): string {
+  private createShareUrl(roomCode: string, inviteCode: string | null): string {
     const baseUrl = process.env.PUBLIC_APP_URL ?? 'http://localhost:3000';
-    return `${baseUrl}/room/${roomCode}`;
+    const url = `${baseUrl}/room/${roomCode}`;
+    return inviteCode ? `${url}?invite=${inviteCode}` : url;
+  }
+
+  private createSessionToken(roomId: string, playerId: string): string {
+    const payload = Buffer.from(
+      JSON.stringify({
+        exp: Date.now() + 24 * 60 * 60 * 1000,
+        player_id: playerId,
+        room_id: roomId,
+      }),
+    ).toString('base64url');
+    const signature = this.sign(payload);
+
+    return `${payload}.${signature}`;
+  }
+
+  private sign(payload: string): string {
+    return createHmac('sha256', process.env.SESSION_TOKEN_SECRET ?? 'dev-session-secret')
+      .update(payload)
+      .digest('base64url');
   }
 }

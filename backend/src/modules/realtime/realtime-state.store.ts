@@ -5,6 +5,8 @@ import { GameplayState } from './realtime.types';
 const reconnectTtlSeconds = 5 * 60;
 const chatWindowSeconds = 10;
 const maxChatMessagesPerWindow = 5;
+const actionWindowSeconds = 5;
+const maxActionsPerWindow = 10;
 const gameplayStateTtlSeconds = 60 * 60 * 24;
 
 export type PlayerConnectionState = {
@@ -25,6 +27,7 @@ export class RealtimeStateStore {
         disconnected_at: null,
       } satisfies PlayerConnectionState),
     );
+    await this.bumpStateVersion(roomId);
   }
 
   async markDisconnected(roomId: string, playerId: string): Promise<void> {
@@ -36,6 +39,7 @@ export class RealtimeStateStore {
       } satisfies PlayerConnectionState),
       reconnectTtlSeconds,
     );
+    await this.bumpStateVersion(roomId);
   }
 
   async getConnection(roomId: string, playerId: string): Promise<PlayerConnectionState> {
@@ -60,7 +64,12 @@ export class RealtimeStateStore {
     await this.redisService.del(this.socketKey(socketId));
   }
 
-  async nextStateVersion(roomId: string): Promise<number> {
+  async getStateVersion(roomId: string): Promise<number> {
+    const raw = await this.redisService.get(this.stateVersionKey(roomId));
+    return Number(raw ?? 0);
+  }
+
+  async bumpStateVersion(roomId: string): Promise<number> {
     return this.redisService.incr(this.stateVersionKey(roomId), 60 * 60 * 24);
   }
 
@@ -71,6 +80,15 @@ export class RealtimeStateStore {
     );
 
     return count <= maxChatMessagesPerWindow;
+  }
+
+  async assertActionAllowed(roomId: string, playerId: string, action: string): Promise<boolean> {
+    const count = await this.redisService.incr(
+      this.actionRateKey(roomId, playerId, action),
+      actionWindowSeconds,
+    );
+
+    return count <= maxActionsPerWindow;
   }
 
   async getGameplayState(roomId: string): Promise<GameplayState | null> {
@@ -84,6 +102,7 @@ export class RealtimeStateStore {
       JSON.stringify(state),
       gameplayStateTtlSeconds,
     );
+    await this.bumpStateVersion(roomId);
   }
 
   private socketKey(socketId: string): string {
@@ -100,6 +119,10 @@ export class RealtimeStateStore {
 
   private chatRateKey(roomId: string, playerId: string): string {
     return `room:${roomId}:player:${playerId}:chat_rate`;
+  }
+
+  private actionRateKey(roomId: string, playerId: string, action: string): string {
+    return `room:${roomId}:player:${playerId}:action:${action}`;
   }
 
   private gameplayStateKey(roomId: string): string {

@@ -18,4 +18,9 @@ export class JoinRoomDto {
   @MinLength(4)
   @MaxLength(100)
   password?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  invite_code?: string;
 }

@@ -3,14 +3,17 @@ import { RoomClient } from './RoomClient';
 
 export default async function RoomPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ roomId: string }>;
+  searchParams: Promise<{ invite?: string }>;
 }) {
   const { roomId } = await params;
+  const { invite } = await searchParams;
 
   return (
     <AppShell>
-      <RoomClient roomId={roomId} />
+      <RoomClient inviteCode={invite} roomId={roomId} />
     </AppShell>
   );
 }

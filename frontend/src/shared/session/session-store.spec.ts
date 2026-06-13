@@ -14,8 +14,10 @@ describe('room session store', () => {
       playerName: 'Budi',
       roomCode: 'ABCD1234',
       roomId: 'room-1',
+      sessionToken: 'token-1',
     });
 
     expect(getRoomSession('room-1')?.playerName).toBe('Budi');
+    expect(getRoomSession('ABCD1234')?.sessionToken).toBe('token-1');
   });
 });

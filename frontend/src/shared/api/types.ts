@@ -106,12 +106,14 @@ export type CreateRoomResponse = {
   share_url: string;
   guest_id: string;
   player_id: string;
+  session_token: string;
 };
 
 export type JoinRoomInput = {
   room_code: string;
   player_name: string;
   password?: string;
+  invite_code?: string;
 };
 
 export type JoinRoomResponse =
@@ -128,6 +130,7 @@ export type JoinRoomResponse =
       status: 'success';
       guest_id: string;
       player_id: string;
+      session_token: string;
     };
 
 export type RealtimeRoomState = {
@@ -153,6 +156,7 @@ export type RealtimeRoomState = {
       | 'bankruptcy_resolution'
       | 'finished';
     double_count: number;
+    deadline_at: string | null;
   };
   dice: DiceState;
   pending_action: PendingAction;

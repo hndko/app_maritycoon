@@ -42,6 +42,7 @@ export function ActionPanel({
     current_player_id: string | null;
     phase: string;
     double_count: number;
+    deadline_at?: string | null;
   };
 }) {
   const canStart = status === 'waiting' && session?.isHost && playerCount >= 2 && isConnected;

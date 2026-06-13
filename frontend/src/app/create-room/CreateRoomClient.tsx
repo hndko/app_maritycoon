@@ -46,8 +46,10 @@ export function CreateRoomClient() {
         playerName: hostName,
         roomCode: created.room_code,
         roomId: created.room_id,
+        sessionToken: created.session_token,
       });
-      router.push(`/room/${created.room_id}`);
+      const nextUrl = new URL(created.share_url);
+      router.push(`${nextUrl.pathname}${nextUrl.search}`);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Gagal membuat room');
     } finally {

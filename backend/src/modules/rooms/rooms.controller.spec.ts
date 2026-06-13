@@ -11,6 +11,7 @@ describe('RoomsController', () => {
         share_url: 'http://localhost:3000/room/ABCD1234',
         guest_id: 'guest-1',
         player_id: 'player-1',
+        session_token: 'token-1',
       })),
     } as unknown as RoomsService;
     const controller = new RoomsController(service);
@@ -29,6 +30,7 @@ describe('RoomsController', () => {
       share_url: 'http://localhost:3000/room/ABCD1234',
       guest_id: 'guest-1',
       player_id: 'player-1',
+      session_token: 'token-1',
     });
   });
 
@@ -39,6 +41,7 @@ describe('RoomsController', () => {
         status: 'success',
         guest_id: 'guest-2',
         player_id: 'player-2',
+        session_token: 'token-2',
       })),
     } as unknown as RoomsService;
     const controller = new RoomsController(service);
@@ -53,6 +56,7 @@ describe('RoomsController', () => {
       status: 'success',
       guest_id: 'guest-2',
       player_id: 'player-2',
+      session_token: 'token-2',
     });
   });
 });

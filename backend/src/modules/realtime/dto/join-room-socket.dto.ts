@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
+import { IsNotEmpty, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
 
 export class JoinRoomSocketDto {
   @IsUUID()
@@ -13,8 +13,7 @@ export class JoinRoomSocketDto {
   @MaxLength(50)
   user_nickname!: string;
 
-  @IsOptional()
   @IsString()
   @MaxLength(200)
-  session_token?: string;
+  session_token!: string;
 }

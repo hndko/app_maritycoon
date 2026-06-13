@@ -25,7 +25,7 @@ import { createSocket } from '@/shared/socket/socket-client';
 import { getRoomSession, saveRoomSession } from '@/shared/session/session-store';
 import { useRoomStore } from '@/stores/room-store';
 
-export function RoomClient({ roomId }: { roomId: string }) {
+export function RoomClient({ inviteCode, roomId }: { inviteCode?: string; roomId: string }) {
   const socketRef = useRef<Socket | null>(null);
   const [properties, setProperties] = useState<PropertyTile[]>([]);
   const [isLoading, setLoading] = useState(true);
@@ -47,9 +47,13 @@ export function RoomClient({ roomId }: { roomId: string }) {
   } = useRoomStore();
 
   const activeRoom = state ?? room;
+  const canonicalRoomId = activeRoom?.room_id ?? room?.room_id ?? roomId;
   const players = state?.players ?? room?.players ?? [];
   const currentTurnPlayerId = state?.current_turn_player_id ?? null;
-  const shareUrl = typeof window === 'undefined' ? '' : `${window.location.origin}/room/${roomId}`;
+  const shareUrl =
+    typeof window === 'undefined' || !activeRoom
+      ? ''
+      : `${window.location.origin}/room/${activeRoom.room_code}${inviteCode ? `?invite=${inviteCode}` : ''}`;
 
   const playerSummary = useMemo(() => {
     return players.map((player) => player.player_name).join(', ');
@@ -74,7 +78,7 @@ export function RoomClient({ roomId }: { roomId: string }) {
 
         setRoom(roomDetail);
         setProperties(propertyTiles);
-        setSession(getRoomSession(roomId));
+        setSession(getRoomSession(roomDetail.room_id) ?? getRoomSession(roomDetail.room_code));
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : 'Gagal memuat room');
       } finally {
@@ -103,7 +107,8 @@ export function RoomClient({ roomId }: { roomId: string }) {
       setConnected(true);
       socket.emit('join_room', {
         player_id: session.playerId,
-        room_id: roomId,
+        room_id: canonicalRoomId,
+        session_token: session.sessionToken,
         user_nickname: session.playerName,
       });
     });
@@ -168,7 +173,7 @@ export function RoomClient({ roomId }: { roomId: string }) {
       socketRef.current = null;
       setConnected(false);
     };
-  }, [appendChat, roomId, session, setConnected, setError, setState]);
+  }, [appendChat, canonicalRoomId, roomId, session, setConnected, setError, setState]);
 
   async function handleJoinFromLink(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -185,6 +190,7 @@ export function RoomClient({ roomId }: { roomId: string }) {
 
     try {
       const joined = await apiClient.joinRoom({
+        invite_code: inviteCode,
         password: password || undefined,
         player_name: playerName,
         room_code: room.room_code,
@@ -207,6 +213,7 @@ export function RoomClient({ roomId }: { roomId: string }) {
         playerName,
         roomCode: room.room_code,
         roomId: joined.room_id,
+        sessionToken: joined.session_token,
       };
       saveRoomSession(nextSession);
       setSession(nextSession);

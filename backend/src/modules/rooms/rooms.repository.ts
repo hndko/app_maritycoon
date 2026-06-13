@@ -167,6 +167,15 @@ export class RoomsRepository {
     return result.rows[0] ?? null;
   }
 
+  async findByReference(roomReference: string): Promise<RoomRecord | null> {
+    const result = await this.database.query<RoomRecord>(
+      'SELECT * FROM rooms WHERE id::TEXT = $1 OR room_code = UPPER($1)',
+      [roomReference],
+    );
+
+    return result.rows[0] ?? null;
+  }
+
   async findById(roomId: string): Promise<RoomRecord | null> {
     const result = await this.database.query<RoomRecord>(
       'SELECT * FROM rooms WHERE id = $1',

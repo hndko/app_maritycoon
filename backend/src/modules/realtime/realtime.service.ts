@@ -7,6 +7,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { GameRepository } from '../game/game.repository';
 import { RoomPlayerRecord, RoomsRepository } from '../rooms/rooms.repository';
 import { ChatMessageSocketDto } from './dto/chat-message-socket.dto';
@@ -66,11 +67,17 @@ export class RealtimeService {
       throw new BadRequestException('Player nickname does not match room slot');
     }
 
+    this.verifySessionToken(input.session_token, input.room_id, input.player_id);
+
     await this.stateStore.markConnected(input.room_id, input.player_id, socketId);
     return this.getRoomState(input.room_id);
   }
 
-  async disconnect(socketId: string): Promise<SocketSession | null> {
+  async disconnect(socketId: string): Promise<{
+    session: SocketSession;
+    state: RoomStatePayload;
+    turnChanged: TurnChangedPayload | null;
+  } | null> {
     const session = await this.stateStore.getSocketSession(socketId);
 
     if (!session) {
@@ -84,12 +91,21 @@ export class RealtimeService {
 
     await this.stateStore.clearSocketSession(socketId);
     await this.stateStore.markDisconnected(session.roomId, session.playerId);
+    const skipped = await this.skipTurnIfCurrentPlayerUnavailable(
+      session.roomId,
+      session.playerId,
+      'disconnect',
+    );
 
     return {
-      socketId,
-      roomId: session.roomId,
-      playerId: session.playerId,
-      playerName: player?.player_name ?? 'Unknown Player',
+      session: {
+        socketId,
+        roomId: session.roomId,
+        playerId: session.playerId,
+        playerName: player?.player_name ?? 'Unknown Player',
+      },
+      state: await this.getRoomState(session.roomId),
+      turnChanged: skipped,
     };
   }
 
@@ -122,6 +138,7 @@ export class RealtimeService {
     started: GameStartedPayload;
     state: RoomStatePayload;
   }> {
+    await this.assertSocketActionAllowed(session, 'start_game');
     const room = await this.roomsRepository.findById(session.roomId);
 
     if (!room) {
@@ -156,6 +173,7 @@ export class RealtimeService {
       pending_action: null,
       jailed_player_ids: [],
       winner_id: null,
+      ...this.createTurnDeadline(room.turn_timer_seconds),
     });
     const payload: GameStartedPayload = {
       room_id: session.roomId,
@@ -178,6 +196,7 @@ export class RealtimeService {
     finished: GameFinishedPayload | null;
     state: RoomStatePayload;
   }> {
+    await this.assertSocketActionAllowed(session, 'roll_dice');
     const { gameplay, player } = await this.assertCurrentPlayer(session, ['await_roll']);
     let nextGameplay = gameplay;
 
@@ -225,6 +244,8 @@ export class RealtimeService {
         phase: 'free_action',
         pending_action: null,
         jailed_player_ids: this.addUnique(nextGameplay.jailed_player_ids, session.playerId),
+        turn_started_at: gameplay.turn_started_at,
+        turn_deadline_at: gameplay.turn_deadline_at,
       };
       await this.stateStore.setGameplayState(session.roomId, nextGameplay);
       await this.gameRepository.appendLog(session.roomId, 'sent_to_jail', {
@@ -289,6 +310,7 @@ export class RealtimeService {
   async buyProperty(session: SocketSession, propertyId: number): Promise<{
     state: RoomStatePayload;
   }> {
+    await this.assertSocketActionAllowed(session, 'buy_property');
     const { gameplay, player } = await this.assertCurrentPlayer(session, ['await_action']);
     const pending = gameplay.pending_action;
 
@@ -321,6 +343,7 @@ export class RealtimeService {
   }
 
   async buildHouse(session: SocketSession, propertyId: number): Promise<{ state: RoomStatePayload }> {
+    await this.assertSocketActionAllowed(session, 'build_house');
     const { gameplay, player } = await this.assertCurrentPlayer(session, [
       'await_action',
       'free_action',
@@ -390,6 +413,7 @@ export class RealtimeService {
     session: SocketSession,
     propertyId: number,
   ): Promise<{ state: RoomStatePayload }> {
+    await this.assertSocketActionAllowed(session, 'mortgage_property');
     const { gameplay } = await this.assertCurrentPlayer(session, [
       'await_action',
       'free_action',
@@ -428,6 +452,7 @@ export class RealtimeService {
     session: SocketSession,
     propertyId: number,
   ): Promise<{ state: RoomStatePayload }> {
+    await this.assertSocketActionAllowed(session, 'unmortgage_property');
     const { gameplay, player } = await this.assertCurrentPlayer(session, [
       'await_action',
       'free_action',
@@ -463,6 +488,7 @@ export class RealtimeService {
     finished: GameFinishedPayload | null;
     state: RoomStatePayload;
   }> {
+    await this.assertSocketActionAllowed(session, 'declare_bankruptcy');
     const gameplay = await this.getGameplayStateOrThrow(session.roomId);
     const pending = gameplay.pending_action;
 
@@ -486,7 +512,10 @@ export class RealtimeService {
     turnChanged: TurnChangedPayload;
     state: RoomStatePayload;
   }> {
+    await this.assertSocketActionAllowed(session, 'end_turn');
     const { gameplay } = await this.assertCurrentPlayer(session, ['free_action']);
+    const room = await this.roomsRepository.findById(session.roomId);
+    const turnTimerSeconds = room?.turn_timer_seconds ?? 60;
     const players = await this.roomsRepository.listPlayers(session.roomId);
     const activePlayers = players
       .filter((player) => !player.is_bankrupt && player.turn_order !== null)
@@ -507,6 +536,7 @@ export class RealtimeService {
       phase: 'await_roll',
       pending_action: null,
       double_count: shouldKeepTurn ? gameplay.double_count : 0,
+      ...this.createTurnDeadline(turnTimerSeconds),
     };
 
     await this.stateStore.setGameplayState(session.roomId, nextGameplay);
@@ -523,6 +553,7 @@ export class RealtimeService {
     roomId: string,
     knownPlayers?: RoomPlayerRecord[],
   ): Promise<RoomStatePayload> {
+    await this.expireTurnIfOverdue(roomId);
     const room = await this.roomsRepository.findById(roomId);
 
     if (!room) {
@@ -558,7 +589,7 @@ export class RealtimeService {
       max_players: room.max_players,
       starting_money: room.starting_money,
       turn_timer_seconds: room.turn_timer_seconds,
-      state_version: await this.stateStore.nextStateVersion(roomId),
+      state_version: await this.stateStore.getStateVersion(roomId),
       players: realtimePlayers.map((player) => ({
         ...player,
         is_in_jail: gameplay?.jailed_player_ids.includes(player.id) ?? false,
@@ -569,11 +600,41 @@ export class RealtimeService {
         current_player_id: gameplay?.current_player_id ?? currentTurnPlayer,
         phase: gameplay?.phase ?? (room.status === 'playing' ? 'await_roll' : 'waiting'),
         double_count: gameplay?.double_count ?? 0,
+        deadline_at: gameplay?.turn_deadline_at ?? null,
       },
       dice: gameplay?.dice ?? null,
       pending_action: gameplay?.pending_action ?? null,
       winner_id: gameplay?.winner_id ?? null,
     };
+  }
+
+  async expireTurnIfOverdue(roomId: string): Promise<TurnChangedPayload | null> {
+    const gameplay = await this.stateStore.getGameplayState(roomId);
+
+    if (!gameplay || !gameplay.turn_deadline_at || gameplay.phase === 'finished') {
+      return null;
+    }
+
+    if (Date.parse(gameplay.turn_deadline_at) > Date.now()) {
+      return null;
+    }
+
+    return this.skipCurrentTurn(roomId, gameplay, 'turn_timer_expired');
+  }
+
+  private async assertSocketActionAllowed(
+    session: SocketSession,
+    action: string,
+  ): Promise<void> {
+    const isAllowed = await this.stateStore.assertActionAllowed(
+      session.roomId,
+      session.playerId,
+      action,
+    );
+
+    if (!isAllowed) {
+      throw new HttpException('Socket action rate limit exceeded', HttpStatus.TOO_MANY_REQUESTS);
+    }
   }
 
   private rollTwoDice(): NonNullable<GameplayState['dice']> {
@@ -613,6 +674,7 @@ export class RealtimeService {
     session: SocketSession,
     allowedPhases: GameplayState['phase'][],
   ): Promise<{ gameplay: GameplayState; player: RoomPlayerRecord }> {
+    await this.expireTurnIfOverdue(session.roomId);
     const room = await this.roomsRepository.findById(session.roomId);
 
     if (!room) {
@@ -866,6 +928,10 @@ export class RealtimeService {
       pending_action: null,
       double_count: 0,
       jailed_player_ids: gameplay.jailed_player_ids.filter((id) => id !== playerId),
+      ...(nextPlayer ? this.createTurnDeadline(60) : {
+        turn_deadline_at: null,
+        turn_started_at: null,
+      }),
     });
 
     return { bankrupt, finished: null };
@@ -873,5 +939,106 @@ export class RealtimeService {
 
   private addUnique(values: string[], nextValue: string): string[] {
     return values.includes(nextValue) ? values : [...values, nextValue];
+  }
+
+  private async skipTurnIfCurrentPlayerUnavailable(
+    roomId: string,
+    playerId: string,
+    reason: string,
+  ): Promise<TurnChangedPayload | null> {
+    const gameplay = await this.stateStore.getGameplayState(roomId);
+
+    if (!gameplay || gameplay.current_player_id !== playerId || gameplay.phase === 'finished') {
+      return null;
+    }
+
+    return this.skipCurrentTurn(roomId, gameplay, reason);
+  }
+
+  private async skipCurrentTurn(
+    roomId: string,
+    gameplay: GameplayState,
+    reason: string,
+  ): Promise<TurnChangedPayload | null> {
+    if (gameplay.phase === 'bankruptcy_resolution') {
+      return null;
+    }
+
+    const room = await this.roomsRepository.findById(roomId);
+    const players = await this.roomsRepository.listPlayers(roomId);
+    const activePlayers = players
+      .filter((player) => !player.is_bankrupt && player.turn_order !== null)
+      .sort((left, right) => Number(left.turn_order) - Number(right.turn_order));
+
+    if (room?.status !== 'playing' || activePlayers.length === 0 || !gameplay.current_player_id) {
+      return null;
+    }
+
+    const currentIndex = activePlayers.findIndex(
+      (player) => player.id === gameplay.current_player_id,
+    );
+    const nextPlayer = activePlayers[(currentIndex + 1 + activePlayers.length) % activePlayers.length];
+    const nextGameplay: GameplayState = {
+      ...gameplay,
+      current_player_id: nextPlayer.id,
+      phase: 'await_roll',
+      pending_action: null,
+      double_count: 0,
+      dice: null,
+      ...this.createTurnDeadline(room.turn_timer_seconds),
+    };
+
+    await this.stateStore.setGameplayState(roomId, nextGameplay);
+    const turnChanged = { next_player_id: nextPlayer.id };
+    await this.gameRepository.appendLog(roomId, 'turn_skipped', {
+      ...turnChanged,
+      previous_player_id: gameplay.current_player_id,
+      reason,
+    });
+
+    return turnChanged;
+  }
+
+  private createTurnDeadline(turnTimerSeconds: number): {
+    turn_started_at: string;
+    turn_deadline_at: string;
+  } {
+    const startedAt = Date.now();
+
+    return {
+      turn_started_at: new Date(startedAt).toISOString(),
+      turn_deadline_at: new Date(startedAt + turnTimerSeconds * 1000).toISOString(),
+    };
+  }
+
+  private verifySessionToken(token: string, roomId: string, playerId: string): void {
+    const [payload, signature] = token.split('.');
+
+    if (!payload || !signature || !this.isValidSignature(payload, signature)) {
+      throw new ForbiddenException('Invalid session token');
+    }
+
+    const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as {
+      exp?: number;
+      player_id?: string;
+      room_id?: string;
+    };
+
+    if (parsed.room_id !== roomId || parsed.player_id !== playerId || !parsed.exp || parsed.exp < Date.now()) {
+      throw new ForbiddenException('Invalid session token');
+    }
+  }
+
+  private isValidSignature(payload: string, signature: string): boolean {
+    const expected = createHmac('sha256', process.env.SESSION_TOKEN_SECRET ?? 'dev-session-secret')
+      .update(payload)
+      .digest('base64url');
+    const actualBuffer = Buffer.from(signature);
+    const expectedBuffer = Buffer.from(expected);
+
+    return (
+      actualBuffer.length === expectedBuffer.length &&
+      timingSafeEqual(actualBuffer, expectedBuffer)
+    );
   }
 }

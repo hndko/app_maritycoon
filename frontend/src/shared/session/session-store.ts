@@ -5,6 +5,7 @@ export type RoomSession = {
   playerId: string;
   playerName: string;
   isHost: boolean;
+  sessionToken: string;
 };
 
 const sessionKey = 'maritycoon:room-sessions';
@@ -34,5 +35,6 @@ export function saveRoomSession(session: RoomSession): void {
 
   const sessions = readSessions();
   sessions[session.roomId] = session;
+  sessions[session.roomCode] = session;
   window.localStorage.setItem(sessionKey, JSON.stringify(sessions));
 }

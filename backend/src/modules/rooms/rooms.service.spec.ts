@@ -76,11 +76,43 @@ describe('RoomsService', () => {
     );
     expect(result).toEqual({
       room_id: 'room-1',
-      room_code: 'ABCD1234',
-      share_url: 'http://localhost:3000/room/ABCD1234',
-      guest_id: 'guest-1',
-      player_id: 'player-1',
+        room_code: 'ABCD1234',
+        share_url: 'http://localhost:3000/room/ABCD1234',
+        guest_id: 'guest-1',
+        player_id: 'player-1',
+        session_token: expect.any(String),
+      });
+  });
+
+  it('creates invite-only share URLs with invite codes', async () => {
+    const repository = {
+      roomCodeExists: vi.fn(async () => false),
+      createRoomWithHost: vi.fn(async () => ({
+        room_id: 'room-1',
+        room_code: 'ABCD1234',
+        host_guest_id: 'guest-1',
+        host_player_id: 'player-1',
+      })),
+    };
+    const service = createService({ repository });
+
+    const result = await service.createRoom({
+      host_nickname: 'Budi',
+      room_name: 'Room Seru',
+      max_players: 4,
+      is_public: false,
+      visibility: 'invite_only',
+      starting_money: 15000000,
     });
+
+    expect(repository.createRoomWithHost).toHaveBeenCalledWith(
+      expect.objectContaining({
+        inviteCode: expect.any(String),
+        isPublic: false,
+        visibility: 'invite_only',
+      }),
+    );
+    expect(result.share_url).toContain('http://localhost:3000/room/ABCD1234?invite=');
   });
 
   it('asks for a password when joining a protected room without password', async () => {
@@ -170,11 +202,32 @@ describe('RoomsService', () => {
       status: 'success',
       guest_id: 'guest-2',
       player_id: 'player-2',
+      session_token: expect.any(String),
     });
     expect(repository.addPlayer).toHaveBeenCalledWith({
       roomId: 'room-1',
       playerName: 'Siti',
     });
+  });
+
+  it('rejects invite-only joins without a matching invite code', async () => {
+    const service = createService({
+      repository: {
+        findByCode: vi.fn(async () => ({
+          ...waitingRoom,
+          invite_code: 'invite-secret',
+          is_public: false,
+          visibility: 'invite_only' as const,
+        })),
+      },
+    });
+
+    await expect(
+      service.joinRoom({
+        room_code: 'ABCD1234',
+        player_name: 'Siti',
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('throws not found when room code does not exist', async () => {

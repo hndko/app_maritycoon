@@ -13,6 +13,7 @@ const session = {
   playerName: 'Host A',
   roomCode: 'ROOMA',
   roomId: 'room-a',
+  sessionToken: 'token-a',
 };
 
 let root: Root | null = null;
@@ -108,6 +109,7 @@ describe('ActionPanel', () => {
         status="playing"
         turn={{
           current_player_id: 'player-a',
+          deadline_at: null,
           double_count: 0,
           phase: 'await_action',
         }}
@@ -153,6 +155,7 @@ describe('ActionPanel', () => {
         status="playing"
         turn={{
           current_player_id: 'player-a',
+          deadline_at: null,
           double_count: 0,
           phase: 'bankruptcy_resolution',
         }}

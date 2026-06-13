@@ -55,6 +55,8 @@ export type GameplayState = {
   pending_action: PendingAction;
   jailed_player_ids: string[];
   winner_id: string | null;
+  turn_started_at?: string | null;
+  turn_deadline_at?: string | null;
 };
 
 export type RealtimeRoomProperty = {
@@ -79,9 +81,10 @@ export type RoomStatePayload = {
   current_turn_player_id: string | null;
   properties: RealtimeRoomProperty[];
   turn: {
-    current_player_id: string | null;
-    phase: TurnPhase;
-    double_count: number;
+      current_player_id: string | null;
+      phase: TurnPhase;
+      double_count: number;
+      deadline_at: string | null;
   };
   dice: DiceState;
   pending_action: PendingAction;
